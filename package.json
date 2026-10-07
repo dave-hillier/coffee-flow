@@ -1,0 +1,14 @@
+{
+  "name": "coffee-flow",
+  "version": "0.3.0",
+  "private": true,
+  "description": "An isometric management game about flow, queues and capacity, with a headless runner and solver that share its simulation.",
+  "scripts": {
+    "build": "node build.js",
+    "test": "node --test test/sim.test.js",
+    "bench": "node headless/cli.js bench",
+    "solve": "node headless/cli.js solve",
+    "sweep": "node headless/cli.js sweep"
+  },
+  "engines": { "node": ">=18" }
+}

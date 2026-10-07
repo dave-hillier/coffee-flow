@@ -1,0 +1,401 @@
+<title>Coffee Flow</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Pixelify+Sans:wght@400;600&family=Silkscreen&display=swap">
+<style>
+/* Layout: HUD bar on top, the live isometric shop as the page, a build/menu/staff dock at the bottom. Single committed dark look from the 3D kit. */
+:root {
+  --bg: #121a24;
+  --panel: #18222e;
+  --panel-2: #1f2b39;
+  --line: #2a3a4e;
+  --fg: #e9e4d8;
+  --muted: #aab6c4;
+  --accent: #e0a458;
+  --accent-ink: #121a24;
+  --staff: #7fb3e0;
+  --good: #5fc58a;
+  --bad: #e06a55;
+  --scrim: rgba(18, 26, 36, 0.9);
+  --font-display: 'Silkscreen', ui-monospace, 'Courier New', monospace;
+  --font-ui: 'Pixelify Sans', ui-monospace, 'Courier New', monospace;
+  color-scheme: dark;
+}
+[hidden] { display: none !important; }
+html, body { height: 100%; }
+body { margin: 0; background: var(--bg); color: var(--fg); font-family: var(--font-ui); font-size: 14px; }
+.app { height: 100%; display: flex; flex-direction: column; }
+
+button {
+  font: 600 14px var(--font-ui); color: var(--fg); background: var(--panel-2);
+  border: 1px solid var(--line); border-radius: 4px; padding: 6px 10px; min-height: 36px; cursor: pointer;
+}
+button:hover:not(:disabled) { border-color: var(--accent); }
+button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+button[aria-pressed="true"] { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); }
+button:disabled { opacity: 0.45; cursor: not-allowed; }
+.seg { display: inline-flex; border: 1px solid var(--line); border-radius: 4px; overflow: hidden; }
+.seg button { border: 0; border-radius: 0; min-width: 40px; }
+.seg button + button { border-left: 1px solid var(--line); }
+
+/* top bar */
+.bar {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 10px 22px;
+  padding-block: 10px; padding-inline: 16px; background: var(--panel); border-bottom: 1px solid var(--line);
+}
+.brand { display: flex; flex-direction: column; gap: 2px; }
+.brand h1 { margin: 0; font-family: var(--font-display); font-weight: 400; font-size: 20px; letter-spacing: 0.5px; }
+.brand small { color: var(--muted); font-size: 12px; }
+.stats { display: flex; flex-wrap: wrap; gap: 6px 20px; flex: 1; min-width: 0; }
+.stat { display: flex; flex-direction: column; gap: 1px; min-width: 0; }
+.stat b { font-size: 17px; font-weight: 600; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.stat span { font-size: 10px; color: var(--muted); letter-spacing: 0.08em; text-transform: uppercase; white-space: nowrap; }
+.stat b.neg, .stat b.bad { color: var(--bad); }
+.stat b.good { color: var(--good); }
+.controls { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+#openBtn { min-width: 120px; }
+#openBtn.is-open { background: var(--good); color: var(--accent-ink); border-color: var(--good); }
+
+/* stage */
+.stage { position: relative; flex: 1; min-height: 320px; overflow: hidden; background: var(--bg); }
+.stage canvas { display: block; width: 100%; height: 100%; touch-action: none; }
+.stage.pixel canvas { image-rendering: pixelated; }
+.labels { position: absolute; inset: 0; pointer-events: none; overflow: hidden; }
+.tag {
+  position: absolute; transform: translate(-50%, -100%); white-space: nowrap; pointer-events: none;
+  font-size: 11px; font-weight: 600; background: var(--scrim); color: var(--fg);
+  border: 1px solid var(--line); border-radius: 3px; padding: 2px 5px;
+}
+.tag.sel { border-color: var(--accent); color: var(--accent); }
+.tag.crate { min-width: 92px; text-align: center; }
+.tag.crate.mine { border-color: var(--accent); }
+.tag i { display: block; height: 4px; margin-top: 3px; background: var(--line); }
+.tag i s { display: block; height: 100%; background: var(--accent); }
+.tag small { display: block; font-weight: 400; color: var(--muted); font-size: 10px; }
+
+.goals, .panel, .ticker, .hint, .tip, .replaybar {
+  position: absolute; background: var(--scrim); border: 1px solid var(--line); border-radius: 4px;
+}
+.goals { left: 12px; top: 12px; padding: 10px 12px; max-width: 290px; }
+.goals h2 { margin: 0 0 6px; font-family: var(--font-display); font-weight: 400; font-size: 13px; letter-spacing: 0.5px; color: var(--accent); }
+.goals ol { margin: 0; padding: 0; list-style: none; display: grid; gap: 6px; }
+.goals li { display: grid; grid-template-columns: 16px 1fr; gap: 6px; line-height: 1.3; }
+.goals li::before { content: ''; width: 10px; height: 10px; margin-top: 3px; border: 1px solid var(--muted); }
+.goals li.done { color: var(--muted); text-decoration: line-through; }
+.goals li.done::before { background: var(--good); border-color: var(--good); }
+
+.panel { right: 12px; top: 12px; width: 290px; max-height: calc(100% - 24px); overflow-y: auto; padding: 12px; display: grid; gap: 10px; }
+.panel h2 { margin: 0; font-family: var(--font-display); font-weight: 400; font-size: 15px; display: flex; justify-content: space-between; gap: 8px; align-items: baseline; }
+.panel h2 small { font-family: var(--font-ui); font-size: 11px; color: var(--muted); }
+.panel h3 { margin: 0; font-size: 10px; color: var(--muted); letter-spacing: 0.08em; text-transform: uppercase; font-weight: 400; }
+.panel p { margin: 0; line-height: 1.35; }
+.panel .status { color: var(--accent); }
+.panel .help { color: var(--muted); font-size: 12px; }
+.panel .sec { display: grid; gap: 6px; }
+.chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.chips button { min-height: 30px; padding: 3px 8px; font-size: 13px; }
+.row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.kv { display: grid; grid-template-columns: auto 1fr; gap: 4px 12px; font-variant-numeric: tabular-nums; }
+.kv dt { color: var(--muted); }
+.kv dd { margin: 0; text-align: right; }
+.meter { display: inline-block; width: 70px; height: 6px; background: var(--line); vertical-align: middle; margin-right: 6px; }
+.meter s { display: block; height: 100%; background: var(--accent); }
+.meter.hot s { background: var(--bad); }
+.slots { display: inline-flex; gap: 3px; vertical-align: middle; }
+.slots i { width: 9px; height: 11px; border: 1px solid var(--muted); }
+.slots i.on { background: var(--fg); border-color: var(--fg); }
+.slots.full i.on { background: var(--bad); border-color: var(--bad); }
+.progress { height: 8px; background: var(--line); }
+.progress s { display: block; height: 100%; background: var(--accent); }
+ol.builds { margin: 0; padding-left: 20px; display: grid; gap: 4px; }
+ol.builds li button { min-height: 24px; padding: 0 6px; margin-left: 6px; font-size: 12px; }
+.danger { border-color: var(--bad); }
+.danger[data-armed] { background: var(--bad); color: var(--accent-ink); }
+
+.ticker { left: 12px; bottom: 12px; padding: 6px 10px; display: grid; gap: 3px; max-width: min(420px, calc(100% - 24px)); font-size: 13px; }
+.ticker:empty { display: none; }
+.ticker p { margin: 0; }
+.ticker .good { color: var(--good); }
+.ticker .bad { color: var(--bad); }
+.ticker .warn { color: var(--accent); }
+.hint { right: 12px; bottom: 12px; padding: 5px 9px; font-size: 12px; color: var(--muted); }
+.tip { padding: 5px 8px; font-size: 12px; pointer-events: none; max-width: 260px; transform: translate(14px, 14px); z-index: 2; }
+.tip.bad { border-color: var(--bad); color: var(--bad); }
+.replaybar { left: 50%; top: 12px; transform: translateX(-50%); padding: 6px 8px 6px 12px; display: flex; gap: 10px; align-items: center; border-color: var(--accent); z-index: 1; }
+
+.modal { position: absolute; inset: 0; background: rgba(10, 14, 20, 0.7); display: grid; place-items: center; padding: 16px; z-index: 5; }
+.sheet { background: var(--panel); border: 1px solid var(--line); border-radius: 6px; padding: 18px; width: min(520px, 100%); display: grid; gap: 10px; max-height: 100%; overflow-y: auto; }
+.sheet h2 { margin: 0; font-family: var(--font-display); font-weight: 400; font-size: 18px; }
+.sheet p { margin: 0; color: var(--muted); line-height: 1.4; }
+.sheet label { font-size: 11px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); }
+.sheet textarea { width: 100%; box-sizing: border-box; font: 12px ui-monospace, 'Courier New', monospace; color: var(--fg); background: var(--bg); border: 1px solid var(--line); border-radius: 4px; padding: 8px; resize: vertical; word-break: break-all; }
+.sheet .err { color: var(--bad); min-height: 1em; }
+
+/* dock */
+.dock {
+  display: flex; flex-wrap: wrap; gap: 10px 22px; align-items: flex-start;
+  padding-block: 10px; padding-inline: 16px; background: var(--panel); border-top: 1px solid var(--line);
+}
+.dock-group { display: grid; gap: 6px; min-width: 0; flex: none; max-width: 100%; }
+.dock-group.grow { flex: 1; }
+.dock-h { font-size: 10px; color: var(--muted); letter-spacing: 0.08em; text-transform: uppercase; }
+.cat { display: flex; gap: 8px; overflow-x: auto; padding-bottom: 2px; }
+.card { flex: none; display: grid; gap: 1px; text-align: left; padding: 6px 9px; }
+.card b { font-weight: 600; white-space: nowrap; }
+.card span { font-size: 11px; color: var(--muted); font-weight: 400; white-space: nowrap; font-variant-numeric: tabular-nums; }
+.card[aria-pressed="true"] span { color: var(--accent-ink); }
+.menu-chip { flex: none; display: grid; gap: 1px; text-align: left; padding: 5px 9px; }
+.menu-chip span { font-size: 11px; font-weight: 400; color: var(--muted); }
+.menu-chip[aria-pressed="true"] span { color: var(--accent-ink); }
+.fail { position: absolute; inset: 0; display: grid; place-items: center; padding: 24px; text-align: center; color: var(--muted); }
+
+/* build mode */
+#buildBtn[aria-pressed="true"] span { color: var(--accent-ink); }
+.build-status { color: var(--muted); font-size: 13px; line-height: 1.35; min-width: 0; }
+.build-status b { color: var(--accent); font-weight: 600; }
+.stage.building { box-shadow: inset 0 0 0 2px var(--accent); }
+.stage.menu-open .ticker, .stage.menu-open .hint { display: none; }
+.buildmenu {
+  position: absolute; left: 12px; bottom: 12px; z-index: 3; max-width: calc(100% - 24px); max-height: calc(100% - 24px); overflow-y: auto;
+  box-sizing: border-box; padding: 10px 12px; display: grid; gap: 8px; background: var(--scrim); border: 1px solid var(--accent); border-radius: 4px;
+}
+.buildmenu header { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; flex-wrap: wrap; }
+.buildmenu h2 { margin: 0; font-family: var(--font-display); font-weight: 400; font-size: 14px; letter-spacing: 0.5px; color: var(--accent); }
+.buildmenu header span { font-size: 12px; color: var(--muted); }
+.bm-sec { display: grid; gap: 6px; }
+.bm-sec h3 { margin: 0; font-size: 10px; color: var(--muted); letter-spacing: 0.08em; text-transform: uppercase; font-weight: 400; }
+.bm-row { display: flex; flex-wrap: wrap; gap: 12px; }
+.bm-grid { display: flex; flex-wrap: wrap; gap: 6px; }
+.bm-item { display: grid; gap: 2px; align-content: start; text-align: left; padding: 6px 9px; width: 150px; min-height: 0; }
+.bm-item .top { display: flex; justify-content: space-between; gap: 8px; }
+.bm-item .top span { font-variant-numeric: tabular-nums; }
+.bm-item .meta { font-size: 11px; color: var(--muted); font-weight: 400; }
+.bm-item p { margin: 0; font-size: 12px; color: var(--muted); font-weight: 400; line-height: 1.3; }
+.bm-item .why { font-size: 11px; color: var(--bad); font-weight: 400; }
+.ctx {
+  position: absolute; z-index: 4; min-width: 210px; max-width: 270px; padding: 4px; display: grid; gap: 1px;
+  background: var(--panel); border: 1px solid var(--line); border-radius: 4px; box-shadow: 0 8px 22px rgba(0, 0, 0, 0.45);
+}
+.ctx h4 { margin: 0; padding: 6px 8px 4px; font-size: 10px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); font-weight: 400; }
+.ctx button { border: 0; border-radius: 3px; background: transparent; display: flex; justify-content: space-between; align-items: center; gap: 14px; min-height: 30px; padding: 4px 8px; font-weight: 400; text-align: left; }
+.ctx button:hover:not(:disabled), .ctx button:focus-visible { background: var(--panel-2); outline: none; }
+.ctx button span { color: var(--muted); font-size: 12px; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.ctx button[aria-checked="true"]::before { content: '✓'; color: var(--accent); margin-right: -8px; }
+.ctx button.danger { color: var(--bad); }
+.ctx button[data-armed] { background: var(--bad); color: var(--accent-ink); }
+.ctx button[data-armed] span { color: var(--accent-ink); }
+.ctx hr { border: 0; border-top: 1px solid var(--line); margin: 3px 0; }
+
+/* playtest */
+:root { --s-solo: #3987e5; --s-steady: #d95926; --s-rush: #199e70; --warn: #e0a458; }
+.botbar { border-color: var(--staff); }
+.botbar b { color: var(--staff); font-weight: 600; }
+.sheet.wide { width: min(900px, 100%); }
+.sheet-head { display: flex; justify-content: space-between; align-items: center; gap: 12px; }
+button.primary { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); }
+.strats { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 8px; }
+.strat { display: grid; gap: 6px; padding: 10px; border: 1px solid var(--line); border-radius: 4px; background: var(--panel-2); min-width: 0; }
+.strat header { display: flex; align-items: center; gap: 8px; }
+.strat header b { font-size: 15px; }
+.strat .sw { width: 14px; height: 4px; border-radius: 2px; flex: none; }
+.strat p { font-size: 12px; margin: 0; }
+.strat .row { gap: 6px; }
+.strat label { display: flex; align-items: center; gap: 6px; font-size: 12px; letter-spacing: 0; text-transform: none; color: var(--fg); cursor: pointer; }
+.strat input { accent-color: var(--accent); width: 16px; height: 16px; }
+.strat button { min-height: 30px; padding: 3px 9px; font-size: 13px; margin-left: auto; }
+.pt-controls { gap: 8px 10px; }
+.pt-label { font-size: 11px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); }
+.pt-progress { display: inline-flex; align-items: center; gap: 8px; font-size: 12px; color: var(--muted); font-variant-numeric: tabular-nums; }
+.pt-progress i { display: block; width: 120px; height: 6px; background: var(--line); }
+.pt-progress s { display: block; height: 100%; width: 0; background: var(--accent); }
+.pt-results { display: grid; gap: 12px; min-width: 0; }
+.pt-results:empty { display: none; }
+.finding { margin: 0; padding: 10px 12px; border: 1px solid var(--line); border-left: 3px solid var(--accent); border-radius: 3px; color: var(--fg) !important; line-height: 1.45; }
+.tablewrap { overflow-x: auto; }
+table.pt { width: 100%; border-collapse: collapse; font-variant-numeric: tabular-nums; font-size: 13px; }
+table.pt th { text-align: right; font-weight: 400; font-size: 10px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); padding: 4px 8px; border-bottom: 1px solid var(--line); white-space: nowrap; }
+table.pt td { text-align: right; padding: 6px 8px; border-bottom: 1px solid var(--line); white-space: nowrap; }
+table.pt th:first-child, table.pt td:first-child { text-align: left; }
+table.pt td small { display: block; color: var(--muted); font-size: 11px; }
+table.pt .neg { color: var(--bad); }
+.pill { display: inline-block; padding: 1px 7px; border-radius: 10px; font-size: 12px; border: 1px solid currentColor; }
+.pill.good { color: var(--good); } .pill.warn { color: var(--warn); } .pill.bad { color: var(--bad); }
+.pill::before { margin-right: 4px; }
+.pill.good::before { content: '▲'; } .pill.warn::before { content: '●'; } .pill.bad::before { content: '▼'; }
+.chartbox { position: relative; border: 1px solid var(--line); border-radius: 4px; padding: 10px 10px 4px; background: var(--bg); }
+.chartbox h3 { margin: 0 0 4px; font-size: 13px; font-weight: 600; }
+.chartbox .legend { display: flex; flex-wrap: wrap; gap: 4px 14px; font-size: 12px; color: var(--muted); margin-bottom: 4px; }
+.chartbox .legend span { display: inline-flex; align-items: center; gap: 6px; }
+.chartbox .legend i { width: 14px; height: 3px; border-radius: 2px; display: inline-block; }
+.chartbox .legend i.dash { background: repeating-linear-gradient(90deg, var(--muted) 0 4px, transparent 4px 7px); }
+.chartbox svg { display: block; width: 100%; height: auto; overflow: visible; }
+.chartbox .ctip { position: absolute; pointer-events: none; background: var(--panel); border: 1px solid var(--line); border-radius: 3px; padding: 6px 8px; font-size: 12px; display: grid; gap: 2px; font-variant-numeric: tabular-nums; min-width: 130px; }
+.chartbox .ctip b { font-weight: 600; }
+.chartbox .ctip span { display: flex; justify-content: space-between; gap: 12px; }
+.chartbox .ctip i { width: 10px; height: 3px; display: inline-block; margin-right: 6px; vertical-align: middle; border-radius: 2px; }
+
+/* supplies */
+.tag.gauge { padding: 2px 4px; display: grid; gap: 2px; min-width: 56px; }
+.tag.gauge .g { display: grid; grid-template-columns: 9px 1fr; align-items: center; gap: 3px; }
+.tag.gauge .g b { font-size: 9px; font-weight: 600; color: var(--muted); }
+.tag.gauge .g i { display: block; height: 4px; margin: 0; background: var(--line); }
+.tag.gauge .g i s { display: block; height: 100%; background: var(--accent); }
+.tag.gauge .g.grounds i s { background: #9a6b4a; }
+.tag.gauge .g.low i s { background: var(--warn); }
+.tag.gauge .g.warn b { color: var(--bad); }
+.tag.gauge .g.warn i s { background: var(--bad); }
+.tag.gauge em { font-style: normal; font-size: 10px; color: var(--bad); text-align: center; }
+.tag.gauge em.n { color: var(--muted); }
+.supplies { display: grid; gap: 6px; }
+.sup-line { margin: 0; font-size: 13px; color: var(--muted); }
+.sup-line b { color: var(--fg); font-size: 15px; font-variant-numeric: tabular-nums; }
+.sup-line.low b { color: var(--bad); }
+.sup-line .due { color: var(--accent); }
+.supplies button { min-height: 32px; padding: 3px 9px; font-size: 13px; }
+.stepper { display: inline-flex; align-items: center; gap: 4px; font-size: 13px; color: var(--muted); }
+.stepper b { color: var(--fg); min-width: 2ch; text-align: center; font-variant-numeric: tabular-nums; }
+.stepper button { min-height: 28px; min-width: 28px; padding: 0; }
+/* flow */
+.stage.flow-open .ticker, .stage.flow-open .hint { display: none; }
+.flow {
+  position: absolute; left: 12px; bottom: 12px; z-index: 3; width: min(600px, calc(100% - 24px)); max-height: calc(100% - 24px); overflow-y: auto;
+  box-sizing: border-box; padding: 10px 12px; display: grid; gap: 8px; background: var(--scrim); border: 1px solid var(--line); border-radius: 4px;
+}
+.flow header { display: flex; align-items: center; gap: 10px; }
+.flow header h2 { margin: 0; margin-right: auto; font-family: var(--font-display); font-weight: 400; font-size: 14px; color: var(--accent); }
+.flow header button { min-height: 30px; padding: 2px 9px; font-size: 13px; }
+.flow-stats { display: flex; flex-wrap: wrap; gap: 4px 18px; }
+.flow-stats div { display: grid; }
+.flow-stats b { font-size: 14px; font-weight: 600; font-variant-numeric: tabular-nums; }
+.flow-stats span { font-size: 10px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); }
+.flow-chart { position: relative; }
+.flow-chart h3 { margin: 0 0 2px; font-size: 12px; font-weight: 600; }
+.flow-chart .legend { display: flex; flex-wrap: wrap; gap: 2px 12px; font-size: 11px; color: var(--muted); margin-bottom: 2px; }
+.flow-chart .legend span { display: inline-flex; align-items: center; gap: 5px; }
+.flow-chart .legend i { width: 12px; height: 3px; border-radius: 2px; display: inline-block; }
+.flow-chart .legend i.dash { background: repeating-linear-gradient(90deg, currentColor 0 4px, transparent 4px 6px) !important; }
+.flow-chart svg { display: block; width: 100%; height: auto; }
+.flow-chart .ctip { position: absolute; pointer-events: none; background: var(--panel); border: 1px solid var(--line); border-radius: 3px; padding: 5px 7px; font-size: 11px; display: grid; gap: 2px; font-variant-numeric: tabular-nums; min-width: 150px; z-index: 1; }
+.flow-chart .ctip span { display: flex; justify-content: space-between; gap: 10px; }
+.flow-chart .ctip i { width: 9px; height: 3px; display: inline-block; margin-right: 5px; vertical-align: middle; }
+.flow-empty { margin: 0; font-size: 12px; color: var(--muted); }
+.flow { width: min(660px, calc(100% - 24px)); }
+.flow header { flex-wrap: wrap; }
+.flow-chart .legend .key { color: var(--muted); font-size: 10px; }
+.flow-chart + .flow-chart:not(#flowOrders) .legend { margin-top: -2px; }
+.research { width: min(460px, calc(100% - 24px)); }
+.res-cap, .res-tip { margin: 0; font-size: 12px; color: var(--muted); line-height: 1.4; }
+.res-cap b { color: var(--fg); font-variant-numeric: tabular-nums; }
+.res-cap b.bad { color: var(--bad); }
+.res-tip { color: var(--accent); }
+.res-list { display: grid; gap: 8px; }
+.res-row { display: grid; gap: 4px; padding: 8px 10px; border: 1px solid var(--line); border-radius: 4px; background: var(--panel); }
+.res-row.done { opacity: 0.75; }
+.res-row p { margin: 0; font-size: 12px; color: var(--muted); }
+.res-top { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+.res-ctl { display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--muted); font-variant-numeric: tabular-nums; }
+.res-ctl span { margin-right: auto; }
+.res-ctl button { min-height: 28px; padding: 2px 9px; font-size: 12px; }
+.res-row .pill { font-size: 11px; }
+.res-row .pill:not(.good):not(.warn) { color: var(--muted); }
+.bm-item .why.lock { color: var(--staff); }
+
+@media (max-width: 760px) {
+  .panel { left: 12px; right: 12px; top: auto; bottom: 12px; width: auto; max-height: 55%; }
+  .goals { max-width: calc(100% - 24px); }
+  .hint { display: none; }
+  .stats { gap: 4px 14px; }
+  .stat b { font-size: 15px; }
+}
+@media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
+</style>
+
+<div class="app">
+  <header class="bar">
+    <div class="brand">
+      <h1>Coffee Flow</h1>
+      <small id="scenario">Scenario 1 · seed 1</small>
+    </div>
+    <div class="stats" id="stats" aria-live="off"></div>
+    <div class="controls">
+      <button id="openBtn" type="button">Open shop</button>
+      <div class="seg" role="group" aria-label="Game speed" id="speed">
+        <button type="button" data-speed="0" aria-pressed="false" title="Pause (Space)">❚❚</button>
+        <button type="button" data-speed="1" aria-pressed="true" title="Normal speed (2)">1×</button>
+        <button type="button" data-speed="2" aria-pressed="false" title="3">2×</button>
+        <button type="button" data-speed="5" aria-pressed="false" title="4">5×</button>
+        <button type="button" data-speed="20" aria-pressed="false" title="5">20×</button>
+      </div>
+      <button id="researchBtn" type="button" aria-pressed="false" title="Research (T)">Research</button>
+      <button id="flowBtn" type="button" aria-pressed="false" title="Flow over time (F)">Flow</button>
+      <button id="playtestBtn" type="button">Playtest</button>
+      <button id="replayBtn" type="button">Replay</button>
+      <button id="pixelBtn" type="button" aria-pressed="true">Pixel</button>
+    </div>
+  </header>
+  <main class="stage pixel" id="stage">
+    <div class="labels" id="labels"></div>
+    <section class="goals" id="goals" aria-label="Getting started"></section>
+    <aside class="panel" id="panel" hidden></aside>
+    <div class="replaybar" id="replaybar" hidden></div>
+    <div class="replaybar botbar" id="botbar" hidden></div>
+    <div class="ticker" id="ticker" aria-live="polite"></div>
+    <section class="flow" id="flow" hidden aria-label="Flow over time">
+      <header><h2>Flow</h2>
+        <div class="seg" role="group" aria-label="Chart style"><button type="button" data-mode="stock" aria-pressed="true">Stock</button><button type="button" data-mode="cumulative">Cumulative</button></div>
+        <div class="seg" role="group" aria-label="Time range"><button type="button" data-range="60">1h</button><button type="button" data-range="120" aria-pressed="true">2h</button><button type="button" data-range="480">8h</button><button type="button" data-range="0">All</button></div>
+        <button type="button" id="flowClose" aria-label="Close flow panel">Close</button></header>
+      <div class="flow-stats" id="flowStats"></div>
+      <div class="flow-chart" id="flowGantt"></div>
+      <div class="flow-chart" id="flowOrders"></div>
+      <div class="flow-chart" id="flowBeans"></div>
+      <div class="flow-chart" id="flowResearch"></div>
+    </section>
+    <section class="flow research" id="research" hidden aria-label="Research"></section>
+    <section class="buildmenu" id="buildmenu" hidden aria-label="Choose something to build"></section>
+    <div class="ctx" id="ctx" role="menu" hidden></div>
+    <p class="hint" id="hint">Drag to orbit · right-drag to pan · scroll to zoom · Space pauses</p>
+    <div class="tip" id="tip" hidden></div>
+    <div class="modal" id="playModal" hidden role="dialog" aria-modal="true" aria-labelledby="playTitle">
+      <div class="sheet wide">
+        <div class="sheet-head"><h2 id="playTitle">Playtest</h2><button id="closePlay" type="button" aria-label="Close playtest">Close</button></div>
+        <p>Bots play the game with the same actions you have. Run many games at once to see whether a strategy can make money, or watch one play.</p>
+        <div class="strats" id="strats"></div>
+        <div class="row pt-controls">
+          <span class="pt-label">Games each</span>
+          <div class="seg" role="group" aria-label="Games per strategy" id="ptSeeds"><button type="button" data-v="4">4</button><button type="button" data-v="8" aria-pressed="true">8</button><button type="button" data-v="16">16</button></div>
+          <span class="pt-label">Length</span>
+          <div class="seg" role="group" aria-label="Game length" id="ptHours"><button type="button" data-v="2">2h</button><button type="button" data-v="4">4h</button><button type="button" data-v="8" aria-pressed="true">8h</button><button type="button" data-v="20">20h</button></div>
+          <button type="button" id="ptRun" class="primary">Run playtest</button>
+          <span class="pt-progress" id="ptProgress" hidden><i><s></s></i><span></span></span>
+        </div>
+        <div id="ptResults" class="pt-results"></div>
+      </div>
+    </div>
+    <div class="modal" id="modal" hidden role="dialog" aria-modal="true" aria-labelledby="modalTitle">
+      <div class="sheet">
+        <h2 id="modalTitle">Replay</h2>
+        <p>Every decision is recorded against game time. Anyone with this code rebuilds your run exactly, from the same seed and rules, and can watch it at any speed. A scenario code from the headless explorer has rules but no decisions: loading it starts a fresh game for you to play.</p>
+        <label for="codeOut">Your run so far</label>
+        <textarea id="codeOut" rows="3" readonly></textarea>
+        <div class="row"><button id="copyCode" type="button">Copy code</button><span id="copyMsg" class="help"></span></div>
+        <label for="codeIn">Watch a run or load a scenario</label>
+        <textarea id="codeIn" rows="3" placeholder="Paste a replay or scenario code (starts with CF1-)"></textarea>
+        <p class="err" id="codeErr"></p>
+        <div class="row">
+          <button id="watchBtn" type="button">Load code</button>
+          <button id="restartBtn" type="button" class="danger">Start a new game</button>
+          <button id="closeModal" type="button">Close</button>
+        </div>
+      </div>
+    </div>
+  </main>
+  <footer class="dock">
+    <div class="dock-group"><span class="dock-h">Menu</span><div class="chips" id="menu"></div></div>
+    <div class="dock-group"><span class="dock-h">Build</span><div class="row"><button type="button" id="buildBtn" class="card" aria-pressed="false" aria-controls="buildmenu"><b>Build mode</b><span>B · or right-click the floor</span></button><span class="build-status" id="buildStatus"></span></div></div>
+    <div class="dock-group"><span class="dock-h">Beans</span><div class="supplies" id="supplies"></div></div>
+    <div class="dock-group"><span class="dock-h">Staff</span><div class="chips" id="staff"></div></div>
+  </footer>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
