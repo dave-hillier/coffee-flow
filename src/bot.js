@@ -31,7 +31,7 @@
     dropFilter:    [0, 1, 'bool'],      // take filter off the menu once espresso is on
     reorderPoint:  [0, 200, 'int'],     // standing order: when beans (cups' worth) in the shop, at the door and on order drop below this ...
     reorderQty:    [1, 10, 'int'],      // ... order this many sacks
-    storeSpare:    [0, 30000, 'opt'],   // build a bean store once trading and cash covers it plus this much
+    storeSpare:    [0, 30000, 'opt'],   // mark out a stock area once trading and this much cash is spare
     researchSerial:[0, 1, 'bool'],      // research one topic at a time (1) or everything wanted at once (0)
     standingFirst: [0, 1, 'bool']       // research standing orders before anything else
   };
@@ -99,7 +99,6 @@
     const want = [];
     if (g.standingFirst) want.push('standing');
     if (g.espressoSpare !== NEVER) want.push('espresso');
-    if (g.storeSpare !== NEVER) want.push('storage');
     if (g.cakeSpare !== NEVER) want.push('cake');
     if (!g.standingFirst) want.push('standing');
     const open = want.filter((k) => S.research[k] && !S.research[k].complete);
@@ -125,8 +124,8 @@
           if (!count(S, 'grinder')) tryPlace(S, 'grinder');
           if (tryPlace(S, 'espresso')) log('esp', 'buying a grinder and espresso machine');
         }
-      } else if (g.storeSpare !== NEVER && !count(S, 'store') && S.cash >= cost(S, 'store') + g.storeSpare) {
-        if (tryPlace(S, 'store')) log('store', 'buying a bean store');
+      } else if (g.storeSpare !== NEVER && !count(S, 'stock') && S.cash >= cost(S, 'stock') + g.storeSpare) {
+        if (tryPlace(S, 'stock')) log('stock', 'marking out a stock area');
       } else if (g.cakeSpare !== NEVER && !count(S, 'pastry') && S.cash >= cost(S, 'pastry') + g.cakeSpare) {
         if (tryPlace(S, 'pastry')) log('cake', 'buying a cake display');
       } else {

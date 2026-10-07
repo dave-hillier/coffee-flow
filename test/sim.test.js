@@ -66,20 +66,48 @@ test('beans run out without orders, and a standing order keeps a shop going', ()
   assert.strictEqual(fed.hist.t.length, 480);
 });
 
-test('a bean store fills from the door and refills hoppers', () => {
-  const S = Sim.create(9, null, { 'start.till': 1, 'start.pickup': 1, 'start.brewer': 1, 'start.store': 1, 'start.workers': 2, 'start.sacks': 6, 'research.topics.standing.work': 0 });
-  Sim.act(S, 'open'); Sim.act(S, 'auto', 80, 4);
-  let stocked = 0, fromStore = 0;
-  for (let t = 0; t < 4 * 3600; t++) {
-    const before = S.items.find((i) => i.type === 'store').sacks;
-    Sim.step(S);
-    const after = S.items.find((i) => i.type === 'store').sacks;
-    if (after > before) stocked++; if (after < before) fromStore++;
-  }
-  assert.ok(stocked > 0, 'workers stocked the store');
-  assert.ok(fromStore > 0, 'hoppers were refilled from the store');
-  assert.ok(S.hist.store.some((v) => v > 0));
-  assert.match(Sim.whyNotRemove(S, S.items.find((i) => i.type === 'store')) || 'empty', /sacks|empty|use/);
+for (const type of ['stock', 'store']) {
+  test(type + ' storage fills from the door and refills hoppers', () => {
+    const S = Sim.create(9, null, { 'start.till': 1, 'start.pickup': 1, 'start.brewer': 1, ['start.' + type]: 1, 'start.workers': 2, 'start.sacks': 6, 'research.topics.standing.work': 0 });
+    Sim.act(S, 'open'); Sim.act(S, 'auto', 80, 4);
+    const shelf = () => S.items.find((i) => i.type === type);
+    let stocked = 0, fromStore = 0;
+    for (let t = 0; t < 4 * 3600; t++) {
+      const before = shelf().sacks;
+      Sim.step(S);
+      const after = shelf().sacks;
+      if (after > before) stocked++; if (after < before) fromStore++;
+    }
+    assert.ok(stocked > 0, 'workers stocked it');
+    assert.ok(fromStore > 0, 'hoppers were refilled from it');
+    assert.ok(S.hist.store.some((v) => v > 0));
+    assert.match(Sim.whyNotRemove(S, shelf()) || 'empty', /sacks|empty|use/);
+  });
+}
+
+test('a stock area is free, needs no research and is ready at once', () => {
+  const S = Sim.create(1);
+  const cash = S.cash;
+  assert.strictEqual(Sim.act(S, 'place', 'stock', 0, 0, 0), null);
+  const it = S.items.find((i) => i.type === 'stock');
+  assert.ok(it.built, 'no crate to build');
+  assert.strictEqual(S.cash, cash);
+});
+
+test('stock tiles can be laid as a block, as long as staff can reach every tile', () => {
+  const S = Sim.create(1);
+  for (const [x, z] of [[2, 0], [3, 0], [2, 1], [3, 1]]) assert.strictEqual(Sim.act(S, 'place', 'stock', x, z, 0), null, x + ',' + z);
+  const T = Sim.create(1);
+  for (let z = 3; z < 6; z++) for (let x = 3; x < 6; x++) if (x !== 4 || z !== 4) assert.strictEqual(Sim.act(T, 'place', 'stock', x, z, 0), null, x + ',' + z);
+  assert.match(Sim.act(T, 'place', 'stock', 4, 4, 0), /reach/);
+});
+
+test('a stock cupboard needs no research and stores as much as a stock area', () => {
+  const S = Sim.create(1);
+  assert.ok(!Sim.TKEYS.includes('storage'), 'no stockroom research');
+  assert.strictEqual(Sim.needsResearch(S, 'store'), null);
+  assert.strictEqual(Sim.act(S, 'place', 'store', 0, 0, 0), null);
+  assert.strictEqual(S.R.items.store.sacks, S.R.items.stock.sacks);
 });
 
 test('research: splitting shares the pace, so one at a time finishes the first sooner and the rest no later', () => {

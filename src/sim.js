@@ -5,13 +5,13 @@
 (function (root) {
   'use strict';
   const GW = 12, GH = 12, IN = 10;          // grid; interior rows z 0..9, z 10 = front wall (gap at x 4,5), z 11 = street
-  const VERSION = 7;                         // bump whenever a change makes old replays play out differently
+  const VERSION = 8;                         // bump whenever a change makes old replays play out differently
   const TPM = 60;
   const NAMES = ['Pip', 'Bo', 'Mo', 'Jun', 'Ada', 'Kit', 'Rue', 'Fen', 'Ola', 'Tam'];
   const STREET = { x: 5, z: 11 };
   const DIRS = [{ x: 0, z: 1 }, { x: 1, z: 0 }, { x: 0, z: -1 }, { x: -1, z: 0 }];
 
-  // What things are: names, footprints, which side staff and customers use. Never tuned.
+  // What things are: names, footprints, which side staff and customers use ('any': whichever side is free). Never tuned.
   const SHAPE = {
     till:     { name: 'Till',             w: 2, d: 1, ws: 'back',  cs: 'front', blurb: 'Takes orders and payment. Labelled cups wait on its rail.' },
     pickup:   { name: 'Pickup counter',   w: 2, d: 1, ws: 'back',  cs: 'front', blurb: 'Finished drinks wait here for their customer.' },
@@ -19,7 +19,8 @@
     grinder:  { name: 'Grinder',          w: 1, d: 1, ws: 'front', cs: null, blurb: 'Every espresso is ground here first.' },
     espresso: { name: 'Espresso machine', w: 2, d: 1, ws: 'front', cs: null, blurb: 'Pulls espresso. Needs a grinder.' },
     pastry:   { name: 'Cake display',     w: 2, d: 1, ws: 'back',  cs: null, blurb: 'Plates cake to order.' },
-    store:    { name: 'Bean store',       w: 1, d: 1, ws: 'front', cs: null, blurb: 'Shelves for sacks of beans. Workers stock it from the door and refill hoppers from it.' }
+    stock:    { name: 'Stock area',       w: 1, d: 1, ws: 'any',   cs: null, blurb: 'A patch of floor marked out for sacks of beans. Workers stock it from the door and refill hoppers from it.' },
+    store:    { name: 'Stock cupboard',   w: 1, d: 1, ws: 'front', cs: null, blurb: 'Tidy shelves for sacks of beans. Holds the same as a stock area, but looks the part.' }
   };
   const PSHAPE = {
     filter:   { name: 'Filter coffee', machine: 'brewer' },
@@ -31,7 +32,6 @@
   const TOPICS = {
     espresso: { name: 'Espresso training', unlocks: ['grinder', 'espresso'], blurb: 'Lets you buy a grinder and espresso machine.' },
     cake:     { name: 'Cake supplier',     unlocks: ['pastry'],              blurb: 'Lets you buy a cake display.' },
-    storage:  { name: 'Stockroom',         unlocks: ['store'],               blurb: 'Lets you buy a bean store.' },
     standing: { name: 'Standing orders',   unlocks: ['auto'],                blurb: 'Lets the supplier deliver automatically when beans run low.' }
   };
   const TKEYS = Object.keys(TOPICS);
@@ -43,6 +43,7 @@
     grinder: [[9, 0, 0], [10, 0, 0]],
     espresso: [[6, 0, 0], [4, 0, 0]],
     pastry: [[9, 3, 0]],
+    stock: [[0, 0, 0], [1, 0, 0]],
     store: [[0, 0, 0], [1, 0, 0]]
   };
 
@@ -51,13 +52,13 @@
   const DEFAULT_RULES = {
     startCash: 60000,
     // The starting setup. Equipment listed here starts built, in the standard layout (LAYOUT below).
-    start: { workers: 1, demand: 0, sacks: 3, till: 0, pickup: 0, brewer: 0, grinder: 0, espresso: 0, pastry: 0, store: 0 },
+    start: { workers: 1, demand: 0, sacks: 3, till: 0, pickup: 0, brewer: 0, grinder: 0, espresso: 0, pastry: 0, stock: 0, store: 0 },
     // Beans come in sacks, ordered from a supplier and delivered to the door after a lead time.
     supply: { sackDoses: 20, sackCost: 600, leadMins: 20 },
-    // Research: capacity in units per game minute, split evenly (by weight) across the topics in progress, so four topics
-    // each go at a quarter of the pace. Nothing pays off until a topic is finished: that is the whole cost of splitting.
+    // Research: capacity in units per game minute, split evenly (by weight) across the topics in progress, so three topics
+    // each go at a third of the pace. Nothing pays off until a topic is finished: that is the whole cost of splitting.
     // switchPct (optional, 0 by default) adds a context-switching loss per extra topic. work 0 = known from the start.
-    research: { enabled: 1, rate: 10, switchPct: 0, topics: { espresso: { work: 600 }, cake: { work: 300 }, storage: { work: 150 }, standing: { work: 250 } } },
+    research: { enabled: 1, rate: 10, switchPct: 0, topics: { espresso: { work: 600 }, cake: { work: 300 }, standing: { work: 250 } } },
     // Worker chores: tipping a sack into a hopper, emptying a knock box, dumping grounds at the door.
     chores: { refill: 15, empty: 20, dump: 10 },
     wagePerMin: 15,           // per worker per game minute (£9/h)
@@ -79,6 +80,7 @@
       grinder:  { cost: 10000, buildMins: 4, hopper: 60 },
       espresso: { cost: 38000, buildMins: 14, knock: 25 },
       pastry:   { cost: 22000, buildMins: 8 },
+      stock:    { cost: 0,     buildMins: 0, sacks: 10 },               // floor space, in sacks; free and ready at once
       store:    { cost: 4000,  buildMins: 2, sacks: 10 }                // shelf space, in sacks
     },
     products: {
@@ -134,14 +136,22 @@
     return o;
   }
   function side(it, s) {
-    const f = DIRS[s === 'front' ? it.r : (it.r + 2) % 4], fp = footprint(it), o = [];
-    fp.forEach((c) => {
+    const fs = s === 'any' ? DIRS : [DIRS[s === 'front' ? it.r : (it.r + 2) % 4]], fp = footprint(it), o = [];
+    fs.forEach((f) => fp.forEach((c) => {
       const n = { x: c.x + f.x, z: c.z + f.z };
       if (!fp.some((q) => same(q, n)) && !o.some((q) => same(q, n))) o.push(n);
-    });
+    }));
     return o;
   }
-  const wcell = (it) => side(it, SHAPE[it.type].ws)[0];
+  const inside = (c) => c.x >= 0 && c.x < GW && c.z >= 0 && c.z < IN;
+  // Where staff stand to use it. An 'any' item takes the first free side that can be reached (seen), if there is one.
+  function wcell(it, g, seen) {
+    const ns = side(it, SHAPE[it.type].ws);
+    if (SHAPE[it.type].ws !== 'any' || !g) return ns[0];
+    const free = ns.filter((c) => inside(c) && !g[c.z * GW + c.x]);
+    return free.find((c) => !seen || seen[c.z * GW + c.x]) || free[0] || ns[0];
+  }
+  const reachable = (it, g, seen) => side(it, 'any').some((c) => inside(c) && !g[c.z * GW + c.x] && seen[c.z * GW + c.x]);
   const ccell = (it) => (SHAPE[it.type].cs ? side(it, SHAPE[it.type].cs)[0] : null);
 
   function rebuild(S) {
@@ -149,6 +159,10 @@
     for (let x = 0; x < GW; x++) if (x !== 4 && x !== 5) g[10 * GW + x] = 1;
     S.items.forEach((it) => footprint(it).forEach((c) => { g[c.z * GW + c.x] = 1; }));
     S.grid = g; S.qcache = {}; S.wcache = null; S.acache = null;
+    if (S.items.some((it) => SHAPE[it.type].ws === 'any')) {
+      const seen = flood(g, STREET);
+      S.items.forEach((it) => { if (SHAPE[it.type].ws === 'any') { it.wc = wcell(it, g, seen); it.wsc = [it.wc]; } });
+    }
     S.workers.forEach((a) => { a.tx = null; });
     S.customers.forEach((a) => { a.tx = null; });
   }
@@ -263,9 +277,9 @@
       if (c.x < 0 || c.x >= GW || c.z < 0 || c.z >= IN) return 'Outside the shop';
       if (S.grid[c.z * GW + c.x]) return 'That space is taken';
     }
-    for (const o of S.items) for (const a of [o.wc, o.cc]) if (a && fp.some((c) => same(c, a))) return 'Blocks access to ' + label(S, o);
-    const wc = wcell(it), cc = ccell(it);
-    for (const a of [wc, cc]) {
+    for (const o of S.items) for (const a of [SHAPE[o.type].ws === 'any' ? null : o.wc, o.cc]) if (a && fp.some((c) => same(c, a))) return 'Blocks access to ' + label(S, o);
+    const any = SHAPE[type].ws === 'any', wc = wcell(it, S.grid), cc = ccell(it);
+    for (const a of [any ? null : wc, cc]) {
       if (!a) continue;
       const who = a === wc ? 'staff' : 'customers';
       if (a.x < 0 || a.x >= GW || a.z < 0 || a.z >= IN || S.grid[a.z * GW + a.x]) return 'No room for ' + who + ' to stand';
@@ -273,8 +287,13 @@
     if (cc && same(wc, cc)) return 'No room';
     const g = S.grid.slice(); fp.forEach((c) => { g[c.z * GW + c.x] = 1; });
     const seen = flood(g, STREET);
-    const need = [wc]; if (cc) need.push(cc);
-    S.items.forEach((o) => { need.push(o.wc); if (o.cc) need.push(o.cc); });
+    if (any && !reachable(it, g, seen)) return 'No room for staff to reach it';
+    const need = any ? [] : [wc]; if (cc) need.push(cc);
+    for (const o of S.items) {
+      if (SHAPE[o.type].ws !== 'any') need.push(o.wc);
+      else if (!reachable(o, g, seen)) return 'Blocks access to ' + label(S, o);
+      if (o.cc) need.push(o.cc);
+    }
     for (const a of need) if (!seen[a.z * GW + a.x]) return 'Would cut off part of the shop';
     return null;
   }
@@ -365,12 +384,12 @@
   const hopperOf = (S, it) => S.R.items[it.type].hopper || 0;
   const knockOf = (S, it) => S.R.items[it.type].knock || 0;
   const beansInShop = (S) => S.items.reduce((n, i) => n + (i.built ? i.beans : 0), 0);          // in hoppers
-  const sacksStored = (S) => S.items.reduce((n, i) => n + (i.built && i.type === 'store' ? i.sacks : 0), 0);
-  const shelfOf = (S, it) => (it.type === 'store' ? S.R.items.store.sacks : 0);
+  const shelfOf = (S, it) => S.R.items[it.type].sacks || 0;                                     // stock areas and cupboards
+  const sacksStored = (S) => S.items.reduce((n, i) => n + (i.built ? i.sacks : 0), 0);
   // where a worker takes a sack from: the nearest stocked store, otherwise the pile at the door
   function sackSource(S, w) {
     let best = null, bd = 1e9;
-    for (const i of S.items) if (i.built && i.type === 'store' && i.sacks > 0) { const d = dist(w, i.wc); if (d < bd) { bd = d; best = i; } }
+    for (const i of S.items) if (i.built && i.sacks > 0) { const d = dist(w, i.wc); if (d < bd) { bd = d; best = i; } }
     return best || (S.supply.door > 0 ? 'door' : null);
   }
   const sacksAvailable = (S) => S.supply.door + sacksStored(S);
@@ -395,7 +414,7 @@
     const src = sackSource(S, w);
     const done = () => { m.chore = null; w.load = null; };
     return mk('refill', [
-      { t: 'go', cell: src === 'door' ? DOOR : src.wc, shared: true, status: src === 'door' ? 'Fetching a sack from the door' : 'Fetching a sack from the store' },
+      { t: 'go', cell: src === 'door' ? DOOR : () => src.wc, shared: true, status: src === 'door' ? 'Fetching a sack from the door' : 'Fetching a sack from the store' },
       { t: 'do', fn: () => { if (!S.imap[m.id] || !takeSack(S, src)) { done(); return 'stop'; } w.load = 'sack'; } },
       { t: 'go', cell: m.wc, shared: true, status: 'Carrying beans to ' + label(S, m) },
       { t: 'work', n: S.R.chores.refill, st: m.id, status: 'Filling the hopper' },
@@ -409,7 +428,7 @@
     return mk('stock', [
       { t: 'go', cell: DOOR, shared: true, status: 'Fetching a sack from the door' },
       { t: 'do', fn: () => { if (!S.imap[st.id] || S.supply.door <= 0) { done(); return 'stop'; } S.supply.door--; w.load = 'sack'; } },
-      { t: 'go', cell: st.wc, shared: true, status: 'Carrying beans to the store' },
+      { t: 'go', cell: () => st.wc, shared: true, status: 'Carrying beans to the store' },
       { t: 'work', n: S.R.chores.refill, st: st.id, status: 'Stacking the shelf' },
       { t: 'do', fn: () => { if (S.imap[st.id]) st.sacks = Math.min(shelfOf(S, st), st.sacks + 1); else S.supply.door++; done(); } }
     ], done);
@@ -438,7 +457,7 @@
     }
     // with nothing more pressing, clear the doorway into the store
     if (!urgent && S.supply.door > 0) for (const it of S.items) {
-      if (mine(it) && it.type === 'store' && it.chore == null && it.sacks < shelfOf(S, it)) return stockTask(S, w, it);
+      if (mine(it) && it.built && it.chore == null && it.sacks < shelfOf(S, it)) return stockTask(S, w, it);
     }
     return null;
   }
@@ -798,9 +817,9 @@
       const locked = needsResearch(S, type); if (locked) return 'Needs research: ' + TOPICS[locked].name;
       if (S.cash < c.cost) return 'Not enough cash';
       const why = canPlace(S, type, x, z, r); if (why) return why;
-      const it = addItem(S, type, x, z, r, false);
+      const ready = c.mins <= 0, it = addItem(S, type, x, z, r, ready);
       S.cash -= c.cost; S.st.capex += c.cost;
-      ev(S, label(S, it) + ' delivered. A worker needs to build it.', 'info');
+      ev(S, ready ? label(S, it) + ' marked out' : label(S, it) + ' delivered. A worker needs to build it.', 'info');
       return null;
     }
     if (op === 'remove') {
@@ -811,7 +830,7 @@
       S.workers.forEach((w) => { rm(w.patch, it.id); rm(w.builds, it.id); });
       S.cash += back; S.st.capex -= back;
       rebuild(S);
-      ev(S, (it.built ? 'Sold ' : 'Cancelled ') + SHAPE[it.type].name.toLowerCase(), 'info');
+      ev(S, (!S.R.CAT[it.type].cost ? 'Cleared ' : it.built ? 'Sold ' : 'Cancelled ') + SHAPE[it.type].name.toLowerCase(), 'info');
       return null;
     }
     if (op === 'patch' || op === 'all' || op === 'build' || op === 'fire') {

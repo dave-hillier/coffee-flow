@@ -99,12 +99,14 @@ replays play out.
 - **Beans come in sacks.** You order them (`order n`), and they arrive at the door after `supply.leadMins`.
   A standing order (`auto point qty`) orders `qty` sacks whenever the beans in the shop, at the door and on
   order fall below `point` cups' worth.
-- **The bean store.** A bean store (`store`) is a shelf for `items.store.sacks` sacks, and you can build it like
-  any other station. When workers have nothing more pressing, they carry sacks from the door onto its shelves.
-  Hopper refills come from the nearest stocked store, or from the door if there is none. A store close to the
-  machines shortens every refill trip, but stocking it costs worker time, so it only pays when staff have slack.
-  The Flow chart stacks beans by where they are: in hoppers, in the store, at the door. Bots decide whether to buy
-  one with the `storeSpare` gene.
+- **Stock areas and cupboards.** A stock area (`stock`) is a floor tile marked out for `items.stock.sacks` sacks.
+  It is free and ready at once, with no crate to build. A stock cupboard (`store`) holds the same number of sacks
+  (`items.store.sacks`) and costs money; the difference is only how it looks. Both block walking like any other
+  station. When workers have nothing more pressing, they carry sacks from the door into stock. Hopper refills come
+  from the nearest stocked tile or cupboard, or from the door if there is none. Stock close to the machines
+  shortens every refill trip, but stocking it costs worker time, so it only pays when staff have slack. The Flow
+  chart stacks beans by where they are: in hoppers, in stock, at the door. Bots decide whether to mark out a stock
+  area with the `storeSpare` gene.
 - **Hoppers and knock boxes.** The brewer and grinder have hoppers (`items.*.hopper`). Workers carry a sack in
   from the door and tip it into a hopper. The brewer and the espresso machine fill knock boxes with grounds
   (`items.*.knock`); when one is full that machine stops until a worker empties it and takes the grounds out
@@ -121,11 +123,11 @@ replays play out.
 ## Research
 
 - **Topics.** Espresso training unlocks the grinder and espresso machine. Cake supplier unlocks the cake display.
-  Stockroom unlocks the bean store. Standing orders unlocks automatic reordering; until it's researched, beans
-  are ordered by hand.
+  Standing orders unlocks automatic reordering; until it's researched, beans are ordered by hand. Storage needs
+  no research.
 - **Shared capacity.** `research.rate` units per game minute are split across the topics in progress by weight,
   set with the action `research topic 0..3`.
-- **Even split.** Four topics in progress each go at a quarter of the pace, and nothing is lost by splitting.
+- **Even split.** Three topics in progress each go at a third of the pace, and nothing is lost by splitting.
   Nothing pays off until a topic is finished, though, so one at a time gets the first topic sooner and the rest
   no later. That is the design doc's cost of delay. `research.switchPct` can add an optional context-switching
   loss per extra topic; it is 0 by default.

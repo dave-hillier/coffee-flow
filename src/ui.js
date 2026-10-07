@@ -24,6 +24,8 @@
   const PKEYS = Sim.PKEYS;
   const GBP = new Intl.NumberFormat('en-GB', { style: 'currency', currency: 'GBP', minimumFractionDigits: 2, maximumFractionDigits: 2 });
   const money = (p) => GBP.format(p / 100);
+  const price = (c) => (c.cost ? money(c.cost) : 'Free');
+  const holdsSacks = (it) => (S.R.items[it.type].sacks || 0) > 0;
   const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 
   // =====================================================================
@@ -385,6 +387,7 @@
     if (type === 'grinder') return onCounter(1, 1, mat.top, grinder);
     if (type === 'espresso') return onCounter(2, 1, mat.top, starterEspresso);
     if (type === 'store') return storeShelf();
+    if (type === 'stock') return stockPallet();
     return onCounter(2, 1, mat.top, pastryCase);
   }
   function storeShelf() {
@@ -394,14 +397,23 @@
     const sacks = new THREE.Group(); g.add(sacks); g.userData.sacks = sacks;
     return g;
   }
+  // a pallet on the floor with sacks stacked straight onto it
+  function stockPallet() {
+    const g = new THREE.Group();
+    [0.1, 0.44, 0.78].forEach((x) => blk(g, mat.woodDark, x, 0, 0.1, 0.12, 0.06, 0.8));
+    [0.1, 0.34, 0.58, 0.82].forEach((z) => blk(g, mat.plank, 0.08, 0.06, z, 0.84, 0.04, 0.1));
+    const sacks = new THREE.Group(); g.add(sacks); g.userData.sacks = sacks; g.userData.layer = 0.24; g.userData.base = 0.1;
+    return g;
+  }
   function fillShelf(v, n) {
-    const holder = v.inner.children[0] && v.inner.children[0].userData.sacks; if (!holder) return;
+    const model = v.inner.children[0], holder = model && model.userData.sacks; if (!holder) return;
+    const layer = model.userData.layer || 0.54, base = model.userData.base || 0.11;
     while (holder.children.length) holder.remove(holder.children[0]);
     for (let k = 0; k < n; k++) {
       const shelf = Math.floor(k / 4), slot = k % 4;
       if (shelf > 2) break;
       const m = sackMesh(); m.scale.set(0.95, 0.95, 0.95);
-      m.position.set(0.28 + (slot % 2) * 0.42, 0.11 + shelf * 0.54, 0.3 + Math.floor(slot / 2) * 0.38); m.rotation.y = (k % 3) * 0.1;
+      m.position.set(0.28 + (slot % 2) * 0.42, base + shelf * layer, 0.3 + Math.floor(slot / 2) * 0.38); m.rotation.y = (k % 3) * 0.1;
       holder.add(m);
     }
   }
@@ -430,7 +442,8 @@
     ol.visible = false;
     const v = { root, inner, ol, olm, built: it.built, tag: null, tagKey: '' };
     if (!it.built) v.tag = tagFor('crate');
-    else if (S.R.items[it.type].hopper || S.R.items[it.type].knock || S.R.items[it.type].sacks) v.gauge = tagFor('gauge');
+    // stock tiles are laid in groups and show their sacks on the pallet, so they go without a gauge
+    else if (S.R.items[it.type].hopper || S.R.items[it.type].knock || (S.R.items[it.type].sacks && it.type !== 'stock')) v.gauge = tagFor('gauge');
     return v;
   }
   function workerRig() {
@@ -557,7 +570,7 @@
       seen.add(it.id);
       let v = itemViews.get(it.id);
       if (!v || v.built !== it.built) { if (v) { world.remove(v.root); if (v.tag) v.tag.remove(); if (v.gauge) v.gauge.remove(); } v = makeItemView(it); itemViews.set(it.id, v); world.add(v.root); }
-      if (it.type === 'store' && it.built && v.sackN !== it.sacks) { v.sackN = it.sacks; fillShelf(v, it.sacks); }
+      if (it.built && holdsSacks(it) && v.sackN !== it.sacks) { v.sackN = it.sacks; fillShelf(v, it.sacks); }
     }
     itemViews.forEach((v, id) => { if (!seen.has(id)) { world.remove(v.root); if (v.tag) v.tag.remove(); if (v.gauge) v.gauge.remove(); itemViews.delete(id); } });
 
@@ -695,7 +708,7 @@
     gFillM.color.setHex(col); gBoxM.color.setHex(col);
     gFill.scale.set(w, 1, d); gFill.position.set(o.x + w / 2, 0.02, o.z + d / 2);
     gBox.scale.set(w, 1.07, d); gBox.position.set(o.x + w / 2, 0.535, o.z + d / 2);
-    const wc = Sim.wcell(it), cc = Sim.ccell(it);
+    const wc = Sim.wcell(it, S.grid), cc = Sim.ccell(it);
     gStaff.position.set(wc.x + 0.5, 0.02, wc.z + 0.5);
     gCust.visible = !!cc; if (cc) gCust.position.set(cc.x + 0.5, 0.02, cc.z + 0.5);
     ghost.visible = true;
@@ -766,7 +779,7 @@
     if (placing) {
       hover = null; updateGhost();
       const c = CAT[placing.type];
-      text = ghostReason ? ghostReason : c.name + ' · ' + money(c.cost) + ' · click to place · R rotates · Esc or right-click to choose again. Blue: staff stand here. Amber: customers.';
+      text = ghostReason ? ghostReason : c.name + ' · ' + price(c) + ' · click to place · R rotates · Esc or right-click to choose again. Blue: staff stand here. Amber: customers.';
       bad = !!ghostReason;
     } else {
       ghost.visible = false;
@@ -870,12 +883,12 @@
   function refreshSupplies() {
     const sp = S.supply, sack = S.R.supply.sackDoses, cost = S.R.supply.sackCost, shop = beansInShop();
     const next = sp.orders[0], due = next ? Math.max(0, Math.ceil((next.due - S.t) / 60)) : 0;
-    const stored = S.items.reduce((n, i) => n + (i.built && i.type === 'store' ? i.sacks : 0), 0), hasStore = S.items.some((i) => i.built && i.type === 'store');
+    const stored = S.items.reduce((n, i) => n + (i.built ? i.sacks : 0), 0), hasStore = S.items.some((i) => i.built && holdsSacks(i));
     const key = [sp.door, stored, shop, sp.onOrder, due, sp.auto.point, sp.auto.qty, S.cash >= cost, S.cash >= cost * 5, S.research.standing.complete].join('|');
     if (key === suppliesKey) return; suppliesKey = key;
     const total = shop + (sp.door + stored) * sack, on = sp.auto.qty > 0;
     suppliesEl.innerHTML =
-      '<p class="sup-line' + (total <= sack ? ' low' : '') + '"><b>' + total + '</b> cups of beans · ' + sp.door + ' sack' + (sp.door === 1 ? '' : 's') + ' at the door · ' + (hasStore ? stored + ' in store · ' : '') + shop + ' in hoppers' +
+      '<p class="sup-line' + (total <= sack ? ' low' : '') + '"><b>' + total + '</b> cups of beans · ' + sp.door + ' sack' + (sp.door === 1 ? '' : 's') + ' at the door · ' + (hasStore ? stored + ' in stock · ' : '') + shop + ' in hoppers' +
         (sp.onOrder ? ' · <span class="due">' + sp.onOrder + ' due in ' + due + ' min</span>' : '') + '</p>' +
       '<div class="row">' +
         '<button type="button" data-order="1"' + (S.cash < cost ? ' disabled' : '') + '>Order 1 sack · ' + money(cost) + '</button>' +
@@ -920,13 +933,13 @@
   // after placing, the menu comes back. Esc steps back one level. Right-click opens a menu for whatever is under the cursor.
   const buildBtn = document.getElementById('buildBtn'), buildMenu = document.getElementById('buildmenu');
   const buildStatus = document.getElementById('buildStatus'), ctxEl = document.getElementById('ctx');
-  const BUILD_GROUPS = [['Counters', ['till', 'pickup']], ['Machines', ['brewer', 'grinder', 'espresso', 'pastry']], ['Storage', ['store']]];
+  const BUILD_GROUPS = [['Counters', ['till', 'pickup']], ['Machines', ['brewer', 'grinder', 'espresso', 'pastry']], ['Storage', ['stock', 'store']]];
   let buildMode = false, buildKey = '';
   const makesText = (t) => {
     const ps = PKEYS.filter((p) => PROD[p].machine === t || (t === 'grinder' && PROD[p].grinds));
     if (t === 'till') return 'Where customers order and pay';
     if (t === 'pickup') return 'Where finished drinks wait';
-    if (t === 'store') return 'Holds ' + S.R.items.store.sacks + ' sacks of beans close to the machines';
+    if (t === 'stock' || t === 'store') return 'Holds ' + S.R.items[t].sacks + ' sacks of beans close to the machines';
     return ps.length ? (t === 'grinder' ? 'Needed for ' : 'Unlocks ') + ps.map((p) => PROD[p].name.toLowerCase()).join(', ') : '';
   };
   function setBuildMode(on) {
@@ -948,12 +961,12 @@
     if (!showMenu) { buildKey = ''; return; }
     const key = Sim.TKEYS.map((k) => S.research[k].complete ? 1 : 0).join('') + BUILD_GROUPS.map(([, ts]) => ts.map((t) => (S.cash >= CAT[t].cost ? 1 : 0) + ':' + S.items.filter((i) => i.type === t).length).join()).join('|');
     if (key === buildKey && !force) return; buildKey = key;
-    buildMenu.innerHTML = '<header><h2>Build</h2><span>' + money(S.cash) + ' to spend · items arrive as crates a worker must build · Esc or B to leave</span></header><div class="bm-row">' +
+    buildMenu.innerHTML = '<header><h2>Build</h2><span>' + money(S.cash) + ' to spend · most items arrive as crates a worker must build · Esc or B to leave</span></header><div class="bm-row">' +
       BUILD_GROUPS.map(([g, ts]) => '<div class="bm-sec"><h3>' + g + '</h3><div class="bm-grid">' + ts.map((t) => {
         const c = CAT[t], short = c.cost - S.cash, have = S.items.filter((i) => i.type === t).length, locked = Sim.needsResearch(S, t);
         return '<button type="button" class="bm-item' + (locked ? ' locked' : '') + '" data-place="' + t + '"' + (short > 0 || locked ? ' disabled' : '') + ' title="' + esc(makesText(t) + '. ' + c.blurb + (have ? ' You have ' + have + '.' : '')) + '">' +
-          '<span class="top"><b>' + c.name + '</b><span>' + money(c.cost) + '</span></span>' +
-          (locked ? '<span class="why lock">Research ' + esc(Sim.TOPICS[locked].name) + ' first</span>' : short > 0 ? '<span class="why">Need ' + money(short) + ' more</span>' : '<span class="meta">' + c.w + '×' + c.d + ' · ' + c.mins + ' min to build</span>') + '</button>';
+          '<span class="top"><b>' + c.name + '</b><span>' + price(c) + '</span></span>' +
+          (locked ? '<span class="why lock">Research ' + esc(Sim.TOPICS[locked].name) + ' first</span>' : short > 0 ? '<span class="why">Need ' + money(short) + ' more</span>' : '<span class="meta">' + c.w + '×' + c.d + ' · ' + (c.mins ? c.mins + ' min to build' : 'ready at once') + '</span>') + '</button>';
       }).join('') + '</div></div>').join('') + '</div>';
   }
   buildBtn.addEventListener('click', () => { closeCtx(); setBuildMode(!buildMode); });
@@ -1009,7 +1022,7 @@
     }
     h += '<hr><button type="button" role="menuitem" data-c="details">Details<span></span></button>';
     h += '<button type="button" role="menuitem" class="danger" data-c="remove"' + (why ? ' disabled title="' + esc(why) + '"' : '') + (ctxArmed ? ' data-armed' : '') + '>' +
-      (ctxArmed ? 'Click again to confirm' : (it.built ? 'Sell' : 'Cancel order')) + '<span>' + (why ? esc(why) : '+' + money(refund)) + '</span></button>';
+      (ctxArmed ? 'Click again to confirm' : !c.cost ? 'Clear' : it.built ? 'Sell' : 'Cancel order') + '<span>' + (why ? esc(why) : refund ? '+' + money(refund) : '') + '</span></button>';
     return h;
   }
   function openItemCtx(id, e) {
@@ -1035,7 +1048,7 @@
     BUILD_GROUPS.forEach(([, ts]) => ts.forEach((t) => {
       const c = CAT[t], f = fitAt(t, cell), short = c.cost - S.cash, locked = Sim.needsResearch(S, t);
       const why = locked ? 'needs research' : short > 0 ? 'need ' + money(short) : f.reason ? (f.reason === 'That space is taken' ? 'no room' : f.reason.toLowerCase()) : null;
-      h += '<button type="button" role="menuitem" data-c="place" data-t="' + t + '" data-r="' + (f.r || 0) + '"' + (why ? ' disabled title="' + esc(why) + '"' : '') + '>' + c.name + '<span>' + (why ? esc(why) : money(c.cost)) + '</span></button>';
+      h += '<button type="button" role="menuitem" data-c="place" data-t="' + t + '" data-r="' + (f.r || 0) + '"' + (why ? ' disabled title="' + esc(why) + '"' : '') + '>' + c.name + '<span>' + (why ? esc(why) : price(c)) + '</span></button>';
     }));
     h += '<hr><button type="button" role="menuitem" data-c="mode">' + (buildMode ? 'Leave build mode' : 'Open build menu') + '<span>B</span></button>';
     showCtx(h, e);
@@ -1106,7 +1119,7 @@
     const crew = S.workers.filter((w) => it.built ? (w.all || w.patch.includes(it.id)) : w.builds.includes(it.id));
     const why = Sim.whyNotRemove(S, it), refund = it.built ? c.cost / 2 : c.cost;
     const removeBtn = '<div class="row"><button type="button" class="danger" data-act="remove" data-i="' + it.id + '"' + (why ? ' disabled title="' + esc(why) + '"' : '') + (isArmed('remove', it.id) ? ' data-armed' : '') + '>' +
-      (isArmed('remove', it.id) ? 'Click again to confirm' : (it.built ? 'Sell for ' : 'Cancel order, refund ') + money(refund)) + '</button>' + (why ? '<span class="help">' + esc(why) + '</span>' : '') + '</div>';
+      (isArmed('remove', it.id) ? 'Click again to confirm' : !c.cost ? 'Clear ' + name.toLowerCase() : (it.built ? 'Sell for ' : 'Cancel order, refund ') + money(refund)) + '</button>' + (why ? '<span class="help">' + esc(why) + '</span>' : '') + '</div>';
     if (!it.built) {
       const pct = Math.floor(100 * it.work / it.total), left = Math.ceil((it.total - it.work) / 60);
       return '<h2>' + esc(name) + '<small>crate</small></h2><p>' + esc(c.blurb) + '</p>' +
@@ -1250,7 +1263,7 @@
   const ACT_NAMES = { till: 'Till', make: 'Making', build: 'Building', chore: 'Chores' };
   const ORDER_STAGES = [['queue', 'Queuing to order', '#3987e5'], ['rail', 'On the rail', '#d95926'], ['making', 'Being made', '#199e70'], ['ready', 'Ready at pickup', '#c98500']];
   const CUM_CURVES = [['cArrived', 'Arrived'], ['cOrdered', 'Ordered'], ['cClaimed', 'Started'], ['cMade', 'Made'], ['cDone', 'Done']];
-  const BEAN_STAGES = [['hoppers', 'In hoppers', '#199e70'], ['store', 'In the store', '#3987e5'], ['door', 'At the door', '#c98500']];
+  const BEAN_STAGES = [['hoppers', 'In hoppers', '#199e70'], ['store', 'In stock', '#3987e5'], ['door', 'At the door', '#c98500']];
   const BEAN_LINES = [['onOrder', 'On order', '#d95926', true], ['grounds', 'Grounds in bins', '#d55181', false]];
   const RES_STAGES = [['rDone', 'Complete', '#199e70'], ['rActive', 'In progress', '#d95926'], ['rAvailable', 'Not started', '#3987e5']];
   let flowRange = 120, flowMode = 'stock', flowKey = '';

@@ -96,7 +96,7 @@ function genesText(g) {
   lines.push(g.hireQueue === N ? 'never hires' : 'hires up to ' + g.hireMax + ' staff when the queue hits ' + g.hireQueue + ' and staff are ' + pct(g.hireUtil) + '+ busy, at most every ' + g.hireGapMin + ' min, keeping ' + m(g.spare) + ' back');
   if (g.fireUtil !== N) lines.push('lets staff go below ' + pct(g.fireUtil) + ' busy');
   lines.push(g.specialise ? 'splits roles: till vs making' : 'everyone covers every station');
-  lines.push(g.storeSpare === N ? 'keeps sacks at the door' : 'builds a bean store with ' + m(g.storeSpare) + ' to spare');
+  lines.push(g.storeSpare === N ? 'keeps sacks at the door' : 'marks out a stock area with ' + m(g.storeSpare) + ' to spare');
   lines.push(g.researchSerial ? 'researches one topic at a time' : 'researches everything it wants at once');
   lines.push('standing order of ' + g.reorderQty + ' sacks when beans drop below ' + g.reorderPoint + ' cups');
   lines.push('builds with ' + (g.crew >= 3 ? 'everyone' : g.crew + ' worker' + (g.crew > 1 ? 's' : '')) + ' once open' + (g.closeToBuild ? ', closes while espresso goes in' : ''));
