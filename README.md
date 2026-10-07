@@ -20,12 +20,17 @@ Controls:
 | Scroll | Zoom |
 | Click a worker, then a station or crate | Assign them to it |
 | Right-click | Context menu for whatever is under the cursor |
-| B | Build mode |
+| B | Open the last build tray |
 | R | Rotate while placing |
+| Esc | Step back: stop placing, close a tray or panel |
 | F | Flow charts |
 | T | Research |
 | Space | Pause |
 | 1–5 | Speed |
+
+The icon row along the bottom opens trays for building, the menu, beans and staff, plus research. Tools appear as
+they become useful. Problems, tutorial steps and goals hang on the ticket rail at the top left and come down when
+dealt with. Flow charts, replay codes, playtest bots and pixel mode are in the ⋯ menu.
 
 ## Deploying
 

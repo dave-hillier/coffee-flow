@@ -502,6 +502,38 @@
   }
   function pickCell() { const p = new V3(); if (!ray.ray.intersectPlane(floorPlane, p)) return null; return { x: Math.floor(p.x), z: Math.floor(p.z) }; }
 
+  // ---------- icons: the real models, rendered once to small pixel images ----------
+  const ICONS = {};
+  function renderIcons() {
+    let r;
+    try { r = new THREE.WebGLRenderer({ antialias: false, alpha: true, preserveDrawingBuffer: true }); } catch (e) { return; }
+    const N = 40; r.setPixelRatio(1); r.setSize(N, N, false); r.setClearColor(0x000000, 0);
+    const sc = new THREE.Scene();
+    sc.add(new THREE.HemisphereLight(0xdfe8f5, 0x3a2c22, 0.95));
+    const sun = new THREE.DirectionalLight(0xfff1dc, 0.65); sun.position.set(4, 9, 6); sc.add(sun);
+    const c = new THREE.OrthographicCamera(-1, 1, 1, -1, 0.1, 100), box = new THREE.Box3(), size = new V3(), mid = new V3();
+    const shoot = (obj, k) => {
+      obj.traverse((o) => { if (o.material === mat.hit) o.visible = false; });
+      sc.add(obj); box.setFromObject(obj); box.getSize(size); box.getCenter(mid);
+      const h = Math.max(size.x, size.y, size.z) * (k || 0.62);
+      c.left = -h; c.right = h; c.top = h; c.bottom = -h; c.updateProjectionMatrix();
+      c.position.copy(mid).addScaledVector(isoDir, 30); c.lookAt(mid);
+      r.render(sc, c); const url = r.domElement.toDataURL(); sc.remove(obj); return url;
+    };
+    const withSacks = (m, n) => { fillShelf({ inner: { children: [m] } }, n); return m; };
+    ['till', 'pickup', 'brewer', 'grinder', 'espresso', 'pastry'].forEach((t) => { ICONS[t] = shoot(modelFor(t)); });
+    ICONS.stock = shoot(withSacks(modelFor('stock'), 6));
+    ICONS.store = shoot(withSacks(modelFor('store'), 7));
+    ICONS.cup = shoot(makeCup('filter'));
+    const sack = new THREE.Group(); sack.add(sackMesh()); const s2 = sackMesh(); s2.position.set(0.12, 0, 0.3); s2.rotation.y = 0.5; sack.add(s2); ICONS.sack = shoot(sack);
+    ICONS.worker = shoot(workerRig().root, 0.46);
+    const books = new THREE.Group();
+    [[mat.red, 0, 0.7], [mat.sleeve, 0.14, 0.62], [mat.chalk, 0.28, 0.66]].forEach(([m, y, w], i) => { blk(books, m, -w / 2 + i * 0.03, y, -0.22, w, 0.13, 0.44); blk(books, mat.white, -w / 2 + i * 0.03 + 0.03, y + 0.02, 0.2, w - 0.06, 0.09, 0.03); });
+    ICONS.research = shoot(books);
+    r.dispose(); if (r.forceContextLoss) r.forceContextLoss();
+    document.querySelectorAll('img[data-ico]').forEach((img) => { if (ICONS[img.dataset.ico]) img.src = ICONS[img.dataset.ico]; });
+  }
+
   // =====================================================================
   // Game state & UI state
   // =====================================================================
@@ -515,10 +547,11 @@
   function newGame(seed, log, rules) {
     clearViews();
     S = Sim.create(seed, log, rules); CAT = S.R.CAT; PROD = S.R.PROD;
-    sel = null; hover = null; placing = null; armed = null; seenEvent = 0; ticker.length = 0; buildMode = false; accessKey = ''; pileN = -1; flowKey = ''; resKey = ''; if (typeof closeCtx === 'function') closeCtx();
+    sel = null; hover = null; placing = null; armed = null; seenEvent = 0; ticker.length = 0; buildMode = false; tray = null; accessKey = ''; revealed.clear(); fresh.clear(); freshItems.clear(); seenDone.clear(); dismissed.clear(); goalsMet.clear(); ticketsHtml = ''; dockKey = ''; suppliesKey = ''; pileN = -1; flowKey = ''; resKey = ''; if (typeof closeCtx === 'function') closeCtx();
     watching = !!(log && log.length); bot = null;
     document.getElementById('scenario').textContent = 'Scenario 1 · seed ' + seed + (Object.keys(S.over).length ? ' · custom rules' : '');
     document.getElementById('scenario').title = Object.entries(S.over).map(([k, v]) => k + ' = ' + v).join('\n');
+    document.getElementById('splashFoot').textContent = document.getElementById('scenario').textContent; passHtml = '';
     renderTicker(); refreshDock(); refreshPanel(true);
   }
 
@@ -531,9 +564,14 @@
     refreshDock(); refreshPanel(true);
     return err;
   }
-  function note(text, kind) { ticker.push({ text, kind: kind || 'info', at: performance.now() }); while (ticker.length > 4) ticker.shift(); renderTicker(); }
+  function note(text, kind) {
+    const last = ticker[ticker.length - 1], now = performance.now();
+    if (last && last.text === text && now - last.at < 15000) { last.n = (last.n || 1) + 1; last.at = now; }
+    else { ticker.push({ text, kind: kind || 'info', at: now }); while (ticker.length > 4) ticker.shift(); }
+    renderTicker();
+  }
   function renderTicker() {
-    document.getElementById('ticker').innerHTML = ticker.map((t) => '<p class="' + t.kind + '">' + esc(t.text) + '</p>').join('');
+    document.getElementById('ticker').innerHTML = ticker.map((t) => '<p class="' + t.kind + '">' + esc(t.text) + (t.n > 1 ? ' ×' + t.n : '') + '</p>').join('');
   }
 
   // =====================================================================
@@ -737,8 +775,6 @@
       if (ghostReason) { note(ghostReason, 'bad'); return; }
       const err = act('place', placing.type, placing.x, placing.z, placing.r);
       if (!err) {
-        const it = S.items[S.items.length - 1];
-        note(CAT[it.type].name + ' delivered as a crate. Right-click it to choose who builds it.', 'info');
         if (!e.shiftKey) { placing = null; ghost.visible = false; }
       }
       refreshBuild(); return;
@@ -817,6 +853,8 @@
   }
   window.addEventListener('keydown', (e) => {
     if (e.target.closest && e.target.closest('textarea, input')) return;
+    if (!splash.hidden) { if (e.key === 'Escape' && started) hideSplash(splashSpeed); return; }
+    if (e.key === 'Escape' && !moreMenu.hidden) { setMore(false); moreBtn.focus(); return; }
     if (e.code === 'Space') { e.preventDefault(); setSpeed(speed ? 0 : lastRunSpeed); }
     else if (/^Digit[1-5]$/.test(e.code)) setSpeed(SPEEDS[+e.code.slice(5) - 1]);
     else if (e.key === 'r' || e.key === 'R') { if (placing) { placing.r = (placing.r + 1) % 4; updateGhost(); refreshBuild(); } }
@@ -828,7 +866,7 @@
       else if (!playModal.hidden) { closePlay(); setSpeed(wasSpeed); }
       else if (!ctxEl.hidden) closeCtx();
       else if (placing) { placing = null; ghost.visible = false; refreshBuild(); }
-      else if (buildMode) setBuildMode(false);
+      else if (tray) setTray(null);
       else if (!flowEl.hidden) setFlow(false);
       else if (!resEl.hidden) setResearch(false);
       else { sel = null; armed = null; refreshPanel(true); }
@@ -838,45 +876,203 @@
   // =====================================================================
   // HUD
   // =====================================================================
-  const statsEl = document.getElementById('stats');
+  const cashEl = document.getElementById('cash'), rateEl = document.getElementById('cashRate'), moodEl = document.getElementById('mood');
+  const passEl = document.getElementById('pass'), clockEl = document.getElementById('clock'), openBtn = document.getElementById('openBtn');
   function fmtTime(t) { const m = Math.floor(t / 60); return Math.floor(m / 60) + 'h ' + String(m % 60).padStart(2, '0') + 'm'; }
+  // money per game hour, from the last hour of history (or what wages cost before there is any)
+  function cashPerHour() {
+    const H = S.hist.cash, n = H.length;
+    if (n < 10) return -(S.workers.length * S.R.wagePerMin + S.R.rentPerMin) * 60;
+    const k = Math.min(60, n - 1);
+    return Math.round((H[n - 1] - H[n - 1 - k]) * 60 / k);
+  }
+  function passStages() {
+    const c = { queue: 0, rail: 0, making: 0, ready: 0 };
+    for (const it of S.items) if (it.type === 'till') c.queue += it.queue.length;
+    for (const k of S.cups) { if (k.waste) continue; if (k.state === 'queued') c.rail++; else if (k.state === 'ready') c.ready++; else c.making++; }
+    return c;
+  }
+  let passHtml = '';
   function refreshStats() {
-    const st = S.st, inShop = S.customers.filter((c) => c.state !== 'leave').length;
-    const cells = [
-      ['Cash', money(S.cash), S.cash < 0 ? 'neg' : ''],
-      ['Satisfaction', Math.round(st.sat * 100) + '%', st.sat < 0.45 ? 'bad' : st.sat > 0.75 ? 'good' : ''],
-      ['Arrivals', S.open ? Math.round(Sim.rate(S)) + '/h' : 'closed', ''],
-      ['Served', S.served.length + '/h', ''],
-      ['Lead time', st.served ? (st.lead / 60).toFixed(1) + ' min' : '–', ''],
-      ['In shop', String(inShop), ''],
-      ['Walked out', String(st.abandoned), st.abandoned ? 'bad' : ''],
-      ['Trading', fmtTime(S.t), '']
-    ];
-    statsEl.innerHTML = cells.map(([k, v, c]) => '<div class="stat"><b class="' + c + '">' + v + '</b><span>' + k + '</span></div>').join('');
-    const ob = document.getElementById('openBtn');
+    const st = S.st;
+    cashEl.textContent = money(S.cash); cashEl.classList.toggle('neg', S.cash < 0);
+    const ph = cashPerHour();
+    rateEl.textContent = (ph >= 0 ? '+' : '−') + money(Math.abs(ph)) + ' an hour' + (!S.open && !st.arrived ? ' before you open' : '');
+    rateEl.className = ph > 0 ? 'up' : ph < 0 && S.cash < -ph * 2 ? 'down' : '';
+    clockEl.textContent = fmtTime(S.t);
+    const trading = S.open || st.arrived > 0;
+    moodEl.hidden = passEl.hidden = !trading;
+    if (trading) {
+      const sat = Math.round(st.sat * 100);
+      moodEl.className = 'mood' + (st.sat < 0.45 ? ' bad' : st.sat < 0.65 ? ' meh' : '');
+      moodEl.innerHTML = '<i></i>' + sat + '% happy' + (st.abandoned ? ' · ' + st.abandoned + ' walked out' : '');
+      const c = passStages(), worst = Math.max(c.queue, c.rail, c.making, c.ready);
+      const seg = (n, label, k) => '<li class="' + (n >= 6 ? 'jam' : n >= 3 && n === worst ? 'hot' : '') + '"><b>' + n + '</b><span>' + label + '</span></li>';
+      const html = seg(c.queue, 'queuing') + '<li class="chev" aria-hidden="true">›</li>' + seg(c.rail, 'orders') + '<li class="chev" aria-hidden="true">›</li>' +
+        seg(c.making, 'making') + '<li class="chev" aria-hidden="true">›</li>' + seg(c.ready, 'ready') +
+        '<li class="lead"><b>' + (st.served ? (st.lead / 60).toFixed(1) + ' min' : '–') + '</b><span>door to cup</span></li>';
+      if (html !== passHtml) { passHtml = html; passEl.innerHTML = html; }
+    }
     const why = S.open ? null : Sim.whyNotOpen(S);
-    ob.textContent = S.open ? 'Shop is open' : 'Open shop';
-    ob.classList.toggle('is-open', S.open);
-    ob.disabled = !!why; ob.title = why || (S.open ? 'Click to close: no new customers will arrive' : 'Let customers in');
+    openBtn.hidden = !!why && !trading;
+    openBtn.textContent = S.open ? 'Open' : trading ? 'Closed' : 'Open shop';
+    openBtn.classList.toggle('is-open', S.open);
+    openBtn.classList.toggle('call', !S.open && !why && !trading);
+    openBtn.disabled = !!why; openBtn.title = why || (S.open ? 'Click to close: no new customers will arrive' : 'Let customers in');
   }
 
-  function refreshGoals() {
-    const g = document.getElementById('goals');
+  // ---------- the ticket rail: steps, problems, milestones and goals ----------
+  // Every ticket is worked out from the game state, so it stays while the problem lasts and comes down when it is fixed.
+  const railEl = document.getElementById('rail'), ticketsEl = document.getElementById('tickets');
+  const dismissed = new Set(), goalsMet = new Set();
+  let ticketsHtml = '';
+  const sumCups = () => beansInShop() + (S.supply.door + S.items.reduce((n, i) => n + (i.built ? i.sacks : 0), 0)) * S.R.supply.sackDoses;
+  const unassigned = () => S.items.filter((i) => !i.built && !S.workers.some((w) => !w.leaving && w.builds.includes(i.id)));
+  function tutorialStep() {
     const has = (t, built) => S.items.some((i) => i.type === t && (!built || i.built));
     const sellable = (built) => PKEYS.some((p) => has(PROD[p].machine, built));
-    const steps = [
-      [has('till') && has('pickup') && sellable(false), 'Press Build (or B) and place a till, a pickup counter and something to sell.'],
-      [has('till', true) && has('pickup', true) && sellable(true), 'Right-click each crate and pick ' + (S.workers[0] ? S.workers[0].name : 'your worker') + ' to build it.'],
-      [S.open || S.st.arrived > 0, 'Open the shop.'],
-      [S.st.served > 0, 'Serve your first customer.']
-    ];
-    if (S.st.served > 0 && S.t > 1200) { g.hidden = true; return; }
-    g.hidden = false;
-    const html = '<h2>Get the shop open</h2><ol>' + steps.map(([d, t]) => '<li class="' + (d ? 'done' : '') + '">' + esc(t) + '</li>').join('') + '</ol>';
-    if (g.innerHTML !== html) g.innerHTML = html;
+    const who = S.workers[0] ? S.workers[0].name : 'your worker';
+    if (S.st.served > 0) return null;
+    if (!(has('till') && has('pickup') && sellable(false))) {
+      const next = !has('till') ? ['Place a till', 'Customers order and pay here. Pick Counters below, then Till.', 'counters']
+        : !has('pickup') ? ['Place a pickup counter', 'Finished drinks wait here. It is in Counters too.', 'counters']
+        : ['Add a batch brewer', 'Something to sell. Pick Machines, then Batch brewer.', 'machines'];
+      return { sev: 'step', k: 'Step 1 of 4', title: next[0], body: next[1], btn: 'Open ' + next[2][0].toUpperCase() + next[2].slice(1), act: 'tray', arg: next[2] };
+    }
+    if (!(has('till', true) && has('pickup', true) && sellable(true))) {
+      const n = unassigned().length;
+      return { sev: 'step', k: 'Step 2 of 4', title: 'Build the crates', body: n ? 'Right-click a crate and pick ' + who + ', or hand them all over.' : who + ' is on it. Speed up time while you wait.', btn: n ? 'Give all to ' + who : '', act: 'assignAll' };
+    }
+    if (!S.open && !S.st.arrived) return { sev: 'step', k: 'Step 3 of 4', title: 'Open the shop', body: 'Customers start arriving once you open.', btn: 'Open shop', act: 'open' };
+    return { sev: 'step', k: 'Step 4 of 4', title: 'Serve a customer', body: 'They order at the till, ' + who + ' brews, and they collect at pickup.' };
+  }
+  const GOALS = [
+    ['serve50', 'Serve 50 customers', () => S.st.served, 50],
+    ['cash1000', 'Have £1,000 in the bank', () => Math.floor(S.cash / 100), 1000],
+    ['espresso', 'Put espresso on the menu', () => (Sim.offered(S).includes('espresso') ? 1 : 0), 1],
+    ['serve200', 'Serve 200 customers', () => S.st.served, 200],
+    ['cake', 'Put cake on the menu', () => (Sim.offered(S).includes('cake') ? 1 : 0), 1],
+    ['cash2500', 'Have £2,500 in the bank', () => Math.floor(S.cash / 100), 2500]
+  ];
+  function goalTicket() {
+    for (const [id, title, val, target] of GOALS) {
+      if (goalsMet.has(id)) continue;
+      const v = val();
+      if (v >= target) { goalsMet.add(id); note('Goal met: ' + title.toLowerCase() + '.', 'good'); continue; }
+      return { sev: 'goal', k: 'Goal', title, bar: target > 1 ? Math.max(0, v) / target : null, body: target > 1 ? Math.max(0, v).toLocaleString('en-GB') + ' of ' + target.toLocaleString('en-GB') : '' };
+    }
+    return null;
+  }
+  function problemTickets() {
+    const out = [], name = (it) => esc(Sim.label(S, it));
+    for (const it of S.items) {
+      if (!it.built) continue;
+      const hc = S.R.items[it.type].hopper || 0, kc = S.R.items[it.type].knock || 0;
+      const prods = PKEYS.filter((p) => Sim.offered(S).includes(p) && (PROD[p].machine === it.type || (it.type === 'grinder' && PROD[p].grinds)));
+      if (hc && it.beans <= 0 && prods.length) {
+        const none = S.supply.door + S.items.reduce((n, i) => n + (i.built ? i.sacks : 0), 0) <= 0;
+        out.push(none ? { sev: 'crit', k: 'Now', title: 'Out of beans', body: 'No sacks left for ' + name(it) + '.' + (S.supply.onOrder ? ' More are on the way.' : ''), btn: S.supply.onOrder ? '' : 'Order 5 sacks', act: 'order', arg: 5 }
+          : { sev: 'crit', k: 'Now', title: 'Hopper empty', body: name(it) + ' can’t make ' + PROD[prods[0]].name.toLowerCase() + ' until it’s refilled.', btn: 'Show me', act: 'show', arg: it.id });
+      }
+      if (kc && it.grounds >= kc) out.push({ sev: 'crit', k: 'Now', title: 'Bin full', body: name(it) + ' has stopped until someone empties it.', btn: 'Show me', act: 'show', arg: it.id });
+    }
+    const W = S.hist.walked, n = W.length, gone = n > 1 ? W[n - 1] - W[Math.max(0, n - 11)] : 0;
+    if (gone > 0) { const till = S.items.find((i) => i.built && i.type === 'till'); out.push({ sev: 'crit', k: 'Last 10 min', title: 'Walking out', body: gone + ' customer' + (gone > 1 ? 's' : '') + ' gave up waiting.', btn: till ? 'Show me' : '', act: 'show', arg: till && till.id }); }
+    if (S.st.served > 0 || S.t > 600) {
+      const crates = unassigned();
+      if (crates.length) out.push({ sev: 'warn', k: crates.length > 1 ? crates.length + ' crates' : 'Crate', title: 'Needs a builder', body: crates.map((c) => esc(Sim.label(S, c))).join(', ') + (crates.length > 1 ? ' are' : ' is') + ' waiting.', btn: 'Assign', act: 'assignAll' });
+    }
+    if (S.items.some((i) => i.built && S.R.items[i.type].hopper) && !S.supply.onOrder && sumCups() <= S.R.supply.sackDoses && sumCups() > 0)
+      out.push({ sev: 'warn', k: 'Beans', title: 'Running low', body: 'About ' + sumCups() + ' cups left and nothing on order.', btn: S.cash >= S.R.supply.sackCost * 5 ? 'Order 5 sacks' : 'Order 1 sack', act: 'order', arg: S.cash >= S.R.supply.sackCost * 5 ? 5 : 1 });
+    const burn = (S.workers.length * S.R.wagePerMin + S.R.rentPerMin) * 60;
+    if (S.cash < 0) out.push({ sev: 'crit', k: 'Money', title: 'In the red', body: 'Wages keep going out. Sell something or cut staff.' });
+    else if ((S.open || S.st.arrived) && S.cash < burn) out.push({ sev: 'warn', k: 'Money', title: 'Cash is low', body: 'Less than an hour of wages and rent left.' });
+    return out;
+  }
+  function milestoneTickets() {
+    const out = [];
+    for (const k of Sim.TKEYS) {
+      const r = S.research[k];
+      if (!r.complete || r.finished <= 0 || S.t - r.finished > 3600 || dismissed.has('res:' + k)) continue;
+      const items = Sim.TOPICS[k].unlocks.filter((t) => CAT[t]);
+      out.push(items.length
+        ? { sev: 'good', k: 'Research done', title: Sim.TOPICS[k].name, body: 'You can build ' + items.map((t) => CAT[t].name.toLowerCase()).join(' and ') + ' now.', btn: 'Build it', act: 'tray', arg: trayOf(items[items.length - 1]), dismiss: 'res:' + k }
+        : { sev: 'good', k: 'Research done', title: Sim.TOPICS[k].name, body: 'Set up a standing order in Beans.', btn: 'Open Beans', act: 'tray', arg: 'beans', dismiss: 'res:' + k });
+    }
+    return out;
+  }
+  function researchTicket() {
+    if (!revealed.has('research')) return null;
+    const open = Sim.TKEYS.filter((k) => !S.research[k].complete);
+    if (!open.length || open.some((k) => S.research[k].weight > 0)) return null;
+    return { sev: 'info', k: 'Research', title: 'Nothing queued', body: 'Pick a topic to work on. It runs in the background.', btn: 'Open research', act: 'research' };
+  }
+  function refreshTickets() {
+    const step = tutorialStep();
+    const list = [].concat(step ? [step] : [], problemTickets(), milestoneTickets(), researchTicket() || [], !step ? goalTicket() || [] : []);
+    const order = { step: 0, crit: 1, warn: 2, good: 3, info: 4, goal: 5 };
+    list.sort((a, b) => order[a.sev] - order[b.sev]);
+    const shown = list.slice(0, 4), more = list.length - shown.length;
+    const html = shown.map((t) => '<li class="ticket ' + t.sev + '"><span class="k">' + t.k + '</span><h3>' + t.title + '</h3>' +
+      (t.bar != null ? '<div class="tbar"><s style="width:' + Math.round(100 * Math.min(1, t.bar)) + '%"></s></div>' : '') +
+      (t.body ? '<p>' + t.body + '</p>' : '') +
+      (t.btn ? '<button type="button" data-tk="' + t.act + '"' + (t.arg != null ? ' data-arg="' + t.arg + '"' : '') + (t.dismiss ? ' data-dismiss="' + t.dismiss + '"' : '') + '>' + t.btn + '</button>' : '') + '</li>').join('') +
+      (more > 0 ? '<li class="ticket more">+' + more + ' more</li>' : '');
+    if (html !== ticketsHtml) { ticketsHtml = html; ticketsEl.innerHTML = html; }
+    railEl.hidden = !shown.length;
+  }
+  function focusItem(id) {
+    const it = S.imap[id]; if (!it) return;
+    const c = centreOf(it), d = new V3(c.x - controls.target.x, 0, c.z - controls.target.z);
+    controls.target.add(d); cam.position.add(d);
+    closeOverlays(); sel = { kind: 'item', id }; armed = null; refreshPanel(true);
+  }
+  function assignAll() {
+    const ws = S.workers.filter((w) => !w.leaving);
+    for (const it of unassigned()) {
+      const w = ws.slice().sort((a, b) => a.builds.length - b.builds.length)[0];
+      if (w) act('build', w.id, it.id);
+    }
+  }
+  railEl.addEventListener('click', (e) => {
+    const b = e.target.closest('[data-tk]'); if (!b) return;
+    const a = b.dataset.tk, arg = b.dataset.arg;
+    if (b.dataset.dismiss) dismissed.add(b.dataset.dismiss);
+    if (a === 'show') focusItem(+arg);
+    else if (a === 'tray') setTray(arg);
+    else if (a === 'assignAll') assignAll();
+    else if (a === 'open') act('open');
+    else if (a === 'order') act('order', +arg);
+    else if (a === 'research') setResearch(true);
+    ticketsHtml = ''; refreshTickets();
+  });
+
+  // ---------- progressive disclosure: tools appear once they are useful, and stay ----------
+  const revealed = new Set(), fresh = new Set(), freshItems = new Set(), seenDone = new Set();
+  const toolsEl = document.getElementById('tools');
+  function refreshReveal() {
+    const rs = S.research;
+    const now = {
+      menu: PKEYS.some((p) => Sim.unlocked(S, p)),
+      beans: S.st.beansUsed > 0 || S.st.beansBought > 0,
+      staff: S.st.served >= 3 || S.workers.length > 1 || passStages().queue >= 3,
+      research: S.st.served > 0 || Sim.TKEYS.some((k) => rs[k].started >= 0)
+    };
+    for (const k in now) if (now[k] && !revealed.has(k)) { revealed.add(k); if (S.t > 0) fresh.add(k); }
+    for (const k of Sim.TKEYS) if (rs[k].complete && rs[k].finished > 0 && !seenDone.has(k)) { seenDone.add(k); Sim.TOPICS[k].unlocks.forEach((t) => { if (CAT[t]) freshItems.add(t); }); }
+    toolsEl.querySelectorAll('[data-tray]').forEach((b) => {
+      const t = b.dataset.tray, build = BUILD_TRAYS[t];
+      if (!build) b.hidden = !revealed.has(t);
+      const isNew = build ? build[1].some((x) => freshItems.has(x)) : fresh.has(t);
+      const badge = b.querySelector('.badge');
+      if (isNew && !badge) b.insertAdjacentHTML('beforeend', '<em class="badge">new</em>'); else if (!isNew && badge) badge.remove();
+      b.setAttribute('aria-expanded', String(tray === t));
+      b.classList.toggle('call', !!(tutorialStep() && tutorialStep().act === 'tray' && tutorialStep().arg === t && tray !== t));
+    });
+    resTool.hidden = !revealed.has('research');
   }
 
-  // ---------- dock ----------
+  // ---------- trays: Menu, Beans and Staff ----------
   const menuEl = document.getElementById('menu'), staffEl = document.getElementById('staff'), suppliesEl = document.getElementById('supplies');
   let suppliesKey = '';
   function beansInShop() { return S.items.reduce((n, i) => n + (i.built ? i.beans : 0), 0); }
@@ -914,27 +1110,34 @@
   });
   let dockKey = '';
   function refreshDock() {
-    const key = [S.workers.length, S.items.filter((i) => i.built).map((i) => i.type).join(), JSON.stringify(S.menuOff), S.cash >= S.R.hireCost].join('|');
+    const key = [S.workers.map((w) => w.id + w.name + w.leaving).join(), S.items.filter((i) => i.built).map((i) => i.type).join(), JSON.stringify(S.menuOff), S.cash >= S.R.hireCost].join('|');
     if (key !== dockKey) {
       dockKey = key;
-      menuEl.innerHTML = PKEYS.map((p) => {
-        const P = PROD[p], un = Sim.unlocked(S, p), on = un && !S.menuOff[p];
-        const need = P.grinds ? 'espresso machine + grinder' : CAT[P.machine].name.toLowerCase();
-        return '<button type="button" class="menu-chip" data-menu="' + p + '" aria-pressed="' + on + '"' + (un ? '' : ' disabled') + ' title="' + (un ? (on ? 'On the menu. Click to stop offering it.' : 'Off the menu. Click to offer it.') : 'Needs a ' + need) + '"><b>' + P.name + '</b><span>' + (un ? money(P.price) + (on ? ' · offered' : ' · off') : 'needs ' + need) + '</span></button>';
+      menuEl.innerHTML = PKEYS.filter((p) => Sim.unlocked(S, p)).map((p) => {
+        const P = PROD[p], on = !S.menuOff[p];
+        return '<button type="button" class="menu-chip" data-menu="' + p + '" aria-pressed="' + on + '" title="' + (on ? 'On the menu. Click to stop offering it.' : 'Off the menu. Click to offer it.') + '"><b>' + P.name + '</b><span>' + money(P.price) + (on ? ' · offered' : ' · off') + '</span></button>';
       }).join('');
-      staffEl.innerHTML = '<button type="button" class="card" id="hireBtn"' + (S.cash < S.R.hireCost || S.workers.length >= S.R.maxWorkers ? ' disabled' : '') + '><b>Hire a worker</b><span>' + money(S.R.hireCost) + ' + ' + money(S.R.wagePerMin * 60) + '/h · ' + S.workers.length + '/' + S.R.maxWorkers + '</span></button>';
+      staffEl.innerHTML = '<ul>' + S.workers.map((w) => '<li><button type="button" data-worker="' + w.id + '"><b>' + esc(w.name) + '</b><span>' + (w.leaving ? 'leaving' : money(S.R.wagePerMin * 60) + ' an hour') + '</span></button></li>').join('') + '</ul>' +
+        '<div class="row"><button type="button" class="card" id="hireBtn"' + (S.cash < S.R.hireCost || S.workers.length >= S.R.maxWorkers ? ' disabled' : '') + '><b>Hire a worker</b><span>' + money(S.R.hireCost) + ' to hire, then ' + money(S.R.wagePerMin * 60) + ' an hour · ' + S.workers.length + ' of ' + S.R.maxWorkers + '</span></button></div>';
     }
+    const cups = sumCups();
+    document.getElementById('beansLabel').textContent = cups + ' cups';
+    document.getElementById('staffLabel').textContent = S.workers.filter((w) => !w.leaving).length + ' of ' + S.R.maxWorkers;
+    refreshResTool();
+    refreshReveal();
     refreshBuild();
     refreshSupplies();
   }
 
-  // ---------- build mode ----------
-  // Build mode is a state: the menu shows what can be built; picking an item turns the cursor into a ghost;
-  // after placing, the menu comes back. Esc steps back one level. Right-click opens a menu for whatever is under the cursor.
-  const buildBtn = document.getElementById('buildBtn'), buildMenu = document.getElementById('buildmenu');
+  // ---------- build mode and trays ----------
+  // Picking a tool opens its tray above the icon row. A build tray shows what can be bought; picking an item turns the
+  // cursor into a ghost; after placing, the tray comes back. Esc steps back one level. Right-click opens a menu for whatever is under the cursor.
+  const trayEl = document.getElementById('tray'), trayBuild = document.getElementById('trayBuild');
   const buildStatus = document.getElementById('buildStatus'), ctxEl = document.getElementById('ctx');
-  const BUILD_GROUPS = [['Counters', ['till', 'pickup']], ['Machines', ['brewer', 'grinder', 'espresso', 'pastry']], ['Storage', ['stock', 'store']]];
-  let buildMode = false, buildKey = '';
+  const BUILD_TRAYS = { counters: ['Counters', ['till', 'pickup']], machines: ['Machines', ['brewer', 'grinder', 'espresso', 'pastry']], storage: ['Storage', ['stock', 'store']] };
+  const SHORT = { till: 'Till', pickup: 'Pickup', brewer: 'Brewer', grinder: 'Grinder', espresso: 'Espresso', pastry: 'Cake case', stock: 'Stock area', store: 'Cupboard' };
+  const trayOf = (type) => Object.keys(BUILD_TRAYS).find((k) => BUILD_TRAYS[k][1].includes(type));
+  let buildMode = false, buildKey = '', tray = null, lastBuildTray = 'counters', tileFocus = null;
   const makesText = (t) => {
     const ps = PKEYS.filter((p) => PROD[p].machine === t || (t === 'grinder' && PROD[p].grinds));
     if (t === 'till') return 'Where customers order and pay';
@@ -942,37 +1145,66 @@
     if (t === 'stock' || t === 'store') return 'Holds ' + S.R.items[t].sacks + ' sacks of beans close to the machines';
     return ps.length ? (t === 'grinder' ? 'Needed for ' : 'Unlocks ') + ps.map((p) => PROD[p].name.toLowerCase()).join(', ') : '';
   };
-  function setBuildMode(on) {
-    buildMode = on; placing = null; ghost.visible = false;
-    if (on) closeOverlays('build');
-    if (on) { sel = null; armed = null; refreshPanel(true); }
-    refreshBuild(true);
+  function setTray(t) {
+    if (t && t === tray && !placing) t = null;
+    if (t) closeOverlays('tray');
+    tray = t || null; placing = null; ghost.visible = false; tileFocus = null;
+    buildMode = !!(tray && BUILD_TRAYS[tray]);
+    if (buildMode) { lastBuildTray = tray; sel = null; armed = null; refreshPanel(true); BUILD_TRAYS[tray][1].forEach((x) => freshItems.delete(x)); }
+    if (tray) fresh.delete(tray);
+    buildKey = ''; refreshBuild(true); refreshReveal();
+  }
+  function setBuildMode(on) { setTray(on ? lastBuildTray : null); }
+  function tileHtml(t) {
+    const c = CAT[t], short = c.cost - S.cash, locked = Sim.needsResearch(S, t);
+    if (locked) {
+      const r = S.research[locked], rr = researchRates(), eta = rr.per[locked] ? Math.ceil((S.R.research.topics[locked].work - r.done) / rr.per[locked]) : null;
+      return '<button type="button" class="tile soon" data-tile="' + t + '" disabled aria-label="' + esc(c.name) + ', coming when ' + esc(Sim.TOPICS[locked].name) + ' is researched"><img alt="" src="' + (ICONS[t] || '') + '"><b>' + SHORT[t] + '</b><span class="price">' + (eta != null ? 'In ' + eta + ' min' : 'Paused') + '</span></button>';
+    }
+    return '<button type="button" class="tile' + (short > 0 ? ' short' : '') + '" data-place="' + t + '" data-tile="' + t + '"' + (short > 0 ? ' disabled' : '') + ' aria-label="' + esc(c.name + ', ' + price(c)) + '">' +
+      (freshItems.has(t) ? '<em class="badge">new</em>' : '') + '<img alt="" src="' + (ICONS[t] || '') + '"><b>' + SHORT[t] + '</b><span class="price">' + price(c) + '</span></button>';
+  }
+  function detailHtml(t) {
+    const c = CAT[t], have = S.items.filter((i) => i.type === t).length, short = c.cost - S.cash, locked = Sim.needsResearch(S, t);
+    return '<h3>' + esc(c.name) + '</h3><p>' + esc(makesText(t)) + '. ' + esc(c.blurb) + '</p><dl>' +
+      '<dt>Price</dt><dd>' + price(c) + '</dd><dt>Build time</dt><dd>' + (c.mins ? c.mins + ' min' : 'ready at once') + '</dd><dt>Size</dt><dd>' + c.w + '×' + c.d + '</dd><dt>You have</dt><dd>' + have + '</dd></dl>' +
+      (locked ? '<p class="why">Comes with ' + esc(Sim.TOPICS[locked].name) + ' research.</p>' : short > 0 ? '<p class="why">Need ' + money(short) + ' more.</p>' : '<p class="key">Click to place · R rotates · Shift-click for several</p>');
   }
   function refreshBuild(force) {
-    buildBtn.setAttribute('aria-pressed', String(buildMode));
+    buildMode = !!((tray && BUILD_TRAYS[tray]) || placing);
     stage.classList.toggle('building', buildMode);
-    const showMenu = buildMode && !placing;
-    buildMenu.hidden = !showMenu; stage.classList.toggle('menu-open', showMenu);
+    const showTray = !!tray && !placing;
+    trayEl.hidden = !showTray; stage.classList.toggle('menu-open', showTray);
     gridLines.visible = buildMode;
     buildStatus.hidden = !placing;
     buildStatus.innerHTML = placing
       ? 'Placing <b>' + esc(CAT[placing.type].name) + '</b> · click the floor · R rotates · Shift-click to place several · Esc to choose again'
       : '';
-    if (!showMenu) { buildKey = ''; return; }
-    const key = Sim.TKEYS.map((k) => S.research[k].complete ? 1 : 0).join('') + BUILD_GROUPS.map(([, ts]) => ts.map((t) => (S.cash >= CAT[t].cost ? 1 : 0) + ':' + S.items.filter((i) => i.type === t).length).join()).join('|');
+    if (!showTray) { buildKey = ''; return; }
+    const build = BUILD_TRAYS[tray];
+    trayBuild.hidden = !build; menuEl.hidden = tray !== 'menu'; suppliesEl.hidden = tray !== 'beans'; staffEl.hidden = tray !== 'staff';
+    document.getElementById('trayTitle').textContent = build ? build[0] : { menu: 'Menu', beans: 'Beans', staff: 'Staff' }[tray];
+    document.getElementById('trayNote').textContent = build ? money(S.cash) + ' to spend · Esc to close' : tray === 'menu' ? 'Click a drink to take it off or put it back' : tray === 'staff' ? 'Pick someone to see what they do' : 'Workers carry sacks from the door to the hoppers';
+    if (!build) return;
+    const types = build[1].filter((t) => { const l = Sim.needsResearch(S, t); return !l || S.research[l].weight > 0 || S.research[l].done > 0; });
+    const key = tray + '|' + types.map((t) => (S.cash >= CAT[t].cost ? 1 : 0) + (Sim.needsResearch(S, t) ? 'l' + Math.floor(S.research[Sim.needsResearch(S, t)].done / 10) : '') + (freshItems.has(t) ? 'n' : '')).join() + '|' + (tileFocus || '') + '|' + S.items.length;
     if (key === buildKey && !force) return; buildKey = key;
-    buildMenu.innerHTML = '<header><h2>Build</h2><span>' + money(S.cash) + ' to spend · most items arrive as crates a worker must build · Esc or B to leave</span></header><div class="bm-row">' +
-      BUILD_GROUPS.map(([g, ts]) => '<div class="bm-sec"><h3>' + g + '</h3><div class="bm-grid">' + ts.map((t) => {
-        const c = CAT[t], short = c.cost - S.cash, have = S.items.filter((i) => i.type === t).length, locked = Sim.needsResearch(S, t);
-        return '<button type="button" class="bm-item' + (locked ? ' locked' : '') + '" data-place="' + t + '"' + (short > 0 || locked ? ' disabled' : '') + ' title="' + esc(makesText(t) + '. ' + c.blurb + (have ? ' You have ' + have + '.' : '')) + '">' +
-          '<span class="top"><b>' + c.name + '</b><span>' + price(c) + '</span></span>' +
-          (locked ? '<span class="why lock">Research ' + esc(Sim.TOPICS[locked].name) + ' first</span>' : short > 0 ? '<span class="why">Need ' + money(short) + ' more</span>' : '<span class="meta">' + c.w + '×' + c.d + ' · ' + (c.mins ? c.mins + ' min to build' : 'ready at once') + '</span>') + '</button>';
-      }).join('') + '</div></div>').join('') + '</div>';
+    const focus = tileFocus && types.includes(tileFocus) ? tileFocus : types[0];
+    trayBuild.innerHTML = '<div class="tiles">' + types.map(tileHtml).join('') + '</div><div class="tile-detail" aria-live="polite">' + (focus ? detailHtml(focus) : '') + '</div>';
   }
-  buildBtn.addEventListener('click', () => { closeCtx(); setBuildMode(!buildMode); });
-  buildMenu.addEventListener('click', (e) => {
+  toolsEl.addEventListener('click', (e) => {
+    const b = e.target.closest('[data-tray]'); if (!b) return;
+    closeCtx(); setTray(b.dataset.tray);
+  });
+  trayBuild.addEventListener('click', (e) => {
     const b = e.target.closest('[data-place]'); if (!b || b.disabled) return;
     placing = { type: b.dataset.place, r: 0 }; refreshBuild();
+  });
+  const tileOver = (e) => { const b = e.target.closest('[data-tile]'); if (b && b.dataset.tile !== tileFocus) { tileFocus = b.dataset.tile; refreshBuild(); } };
+  trayBuild.addEventListener('pointerover', tileOver);
+  trayBuild.addEventListener('focusin', tileOver);
+  staffEl.addEventListener('click', (e) => {
+    const w = e.target.closest('[data-worker]'); if (w) { setTray(null); sel = { kind: 'worker', id: +w.dataset.worker }; refreshPanel(true); }
   });
 
   // grid overlay for build mode
@@ -1065,7 +1297,7 @@
   ctxEl.addEventListener('click', (e) => {
     const b = e.target.closest('button[data-c]'); if (!b || b.disabled || !ctxFor) return;
     const c = b.dataset.c;
-    if (c === 'place') { closeCtx(); if (!buildMode) { buildMode = true; sel = null; refreshPanel(true); } placing = { type: b.dataset.t, r: +b.dataset.r }; refreshBuild(); return; }
+    if (c === 'place') { closeCtx(); if (!buildMode) setTray(trayOf(b.dataset.t)); placing = { type: b.dataset.t, r: +b.dataset.r }; refreshBuild(); return; }
     if (c === 'mode') { closeCtx(); setBuildMode(!buildMode); return; }
     const it = S.imap[ctxFor.id]; if (!it) { closeCtx(); return; }
     if (c === 'details') { closeCtx(); if (buildMode) setBuildMode(false); sel = { kind: 'item', id: it.id }; refreshPanel(true); return; }
@@ -1089,8 +1321,43 @@
   document.getElementById('openBtn').addEventListener('click', () => act('open'));
   document.getElementById('speed').addEventListener('click', (e) => { const b = e.target.closest('[data-speed]'); if (b) setSpeed(+b.dataset.speed); });
   document.getElementById('pixelBtn').addEventListener('click', (e) => {
-    pixel = !pixel; e.currentTarget.setAttribute('aria-pressed', String(pixel)); stage.classList.toggle('pixel', pixel); resize();
+    pixel = !pixel; e.currentTarget.setAttribute('aria-checked', String(pixel)); stage.classList.toggle('pixel', pixel); resize();
   });
+  // ---------- the ⋯ menu: tools and settings most players rarely need ----------
+  const moreBtn = document.getElementById('moreBtn'), moreMenu = document.getElementById('moreMenu');
+  function setMore(on) {
+    moreMenu.hidden = !on; moreBtn.setAttribute('aria-expanded', String(on));
+    if (on) moreMenu.querySelector('button').focus({ preventScroll: true });
+  }
+  moreBtn.addEventListener('click', () => setMore(moreMenu.hidden));
+  moreMenu.addEventListener('click', (e) => { if (e.target.closest('button')) setMore(false); });
+  moreMenu.addEventListener('keydown', (e) => {
+    if (e.key !== 'ArrowDown' && e.key !== 'ArrowUp') return;
+    e.preventDefault();
+    const bs = [...moreMenu.querySelectorAll('button')], i = bs.indexOf(document.activeElement);
+    bs[(i + (e.key === 'ArrowDown' ? 1 : -1) + bs.length) % bs.length].focus();
+  });
+  document.addEventListener('pointerdown', (e) => { if (!moreMenu.hidden && !e.target.closest('.more')) setMore(false); }, true);
+  const hintEl = document.getElementById('hint'), hintBtn = document.getElementById('hintBtn');
+  function setHint(on) { hintEl.hidden = !on; hintBtn.setAttribute('aria-checked', String(on)); }
+  hintBtn.addEventListener('click', () => setHint(hintEl.hidden));
+
+  // ---------- splash ----------
+  const splash = document.getElementById('splash');
+  let splashSpeed = 1, started = false;
+  function showSplash() {
+    splashSpeed = speed || lastRunSpeed; setSpeed(0); setMore(false);
+    document.getElementById('splashResume').hidden = !started;
+    splash.hidden = false; document.getElementById(started ? 'splashResume' : 'splashNew').focus({ preventScroll: true });
+  }
+  function hideSplash(run) { splash.hidden = true; started = true; setSpeed(run); }
+  document.getElementById('splashNew').addEventListener('click', () => {
+    if (started) { newGame(SEED); resetView(); }
+    hideSplash(1); setHint(true); setTimeout(() => setHint(false), 20000);
+  });
+  document.getElementById('splashResume').addEventListener('click', () => hideSplash(splashSpeed));
+  document.getElementById('splashReplay').addEventListener('click', () => { hideSplash(0); openModal(); document.getElementById('codeIn').focus(); });
+  document.getElementById('titleBtn').addEventListener('click', showSplash);
 
   // ---------- selection panel ----------
   const panel = document.getElementById('panel');
@@ -1194,6 +1461,11 @@
       if (!v.gauge) return;
       const it = S.imap[id]; if (!it) return;
       const hc = S.R.items[it.type].hopper || 0, kc = S.R.items[it.type].knock || 0, sc = S.R.items[it.type].sacks || 0;
+      const urgent = (hc && it.beans <= 0) || (kc && it.grounds >= kc);
+      const look = urgent || (hc && it.beans <= hc / 4) || (kc && it.grounds >= kc * 0.6) || buildMode ||
+        (sel && sel.kind === 'item' && sel.id === id) || (hover && hover.kind === 'item' && hover.id === id);
+      v.gauge.hidden = !look; v.gauge.classList.toggle('alert', !!urgent);
+      if (!look) return;
       const key = it.beans + '|' + it.grounds + '|' + it.sacks + '|' + (it.chore != null);
       if (key !== v.gaugeKey) {
         v.gaugeKey = key;
@@ -1270,11 +1542,11 @@
   function closeOverlays(except) {
     if (except !== 'flow' && !flowEl.hidden) setFlow(false);
     if (except !== 'research' && !resEl.hidden) setResearch(false);
-    if (except !== 'build' && buildMode) setBuildMode(false);
+    if (except !== 'tray' && (tray || placing)) setTray(null);
   }
   function setFlow(on) {
     if (on) closeOverlays('flow');
-    flowEl.hidden = !on; flowBtn.setAttribute('aria-pressed', String(on)); stage.classList.toggle('flow-open', on || !resEl.hidden);
+    flowEl.hidden = !on; flowBtn.setAttribute('aria-checked', String(on)); stage.classList.toggle('flow-open', on || !resEl.hidden);
     if (on) { flowKey = ''; refreshFlow(); }
   }
   flowBtn.addEventListener('click', () => setFlow(flowEl.hidden));
@@ -1452,14 +1724,13 @@
   // =====================================================================
   // Research: one shared capacity, split across topics; every extra topic in progress costs capacity
   // =====================================================================
-  const resEl = document.getElementById('research'), resBtn = document.getElementById('researchBtn');
+  const resEl = document.getElementById('research'), resTool = document.getElementById('resTool');
   let resKey = '';
   function setResearch(on) {
     if (on) closeOverlays('research');
-    resEl.hidden = !on; resBtn.setAttribute('aria-pressed', String(on)); stage.classList.toggle('flow-open', on || !flowEl.hidden);
+    resEl.hidden = !on; resTool.setAttribute('aria-expanded', String(on)); stage.classList.toggle('flow-open', on || !flowEl.hidden);
     if (on) { resKey = ''; refreshResearch(); }
   }
-  resBtn.addEventListener('click', () => setResearch(resEl.hidden));
   function researchRates() {
     const R = S.R.research, act = Sim.TKEYS.filter((k) => !S.research[k].complete && S.research[k].weight > 0);
     const total = act.length ? R.rate * 100 / (100 + R.switchPct * (act.length - 1)) : 0;
@@ -1467,27 +1738,62 @@
     const per = {}; act.forEach((k) => { per[k] = total * S.research[k].weight / W; });
     return { act, total, per };
   }
+  // the dock chip: what is being researched and how long is left, or a nudge when nothing is
+  function refreshResTool() {
+    if (resTool.hidden) return;
+    const rr = researchRates(), open = Sim.TKEYS.filter((k) => !S.research[k].complete);
+    const label = document.getElementById('resLabel'), prog = document.getElementById('resProg');
+    let text, cls = '', pct = 0;
+    if (!open.length) { text = 'All researched'; cls = 'done'; }
+    else if (rr.act.length) {
+      const k = rr.act[0], r = S.research[k], work = S.R.research.topics[k].work;
+      pct = Math.floor(100 * r.done / work);
+      text = Sim.TOPICS[k].name + ' · ' + Math.ceil((work - r.done) / rr.per[k]) + ' min' + (rr.act.length > 1 ? ' +' + (rr.act.length - 1) : '');
+    } else { text = 'Pick research'; cls = 'idle'; }
+    if (label.textContent !== text) label.textContent = text;
+    prog.style.width = pct + '%';
+    resTool.classList.toggle('idle', cls === 'idle'); resTool.classList.toggle('done', cls === 'done');
+  }
+  resTool.addEventListener('click', () => { fresh.delete('research'); setResearch(resEl.hidden); });
+  // what a topic is worth and what it costs, from the current rules
+  function topicEffects(k) {
+    const T = Sim.TOPICS[k], items = T.unlocks.filter((t) => CAT[t]);
+    const prods = PKEYS.filter((p) => items.includes(PROD[p].machine));
+    const unlocks = items.map((t) => CAT[t].name + ' ' + money(CAT[t].cost)).concat(prods.map((p) => PROD[p].name + ' on the menu ' + money(PROD[p].price)));
+    if (T.unlocks.includes('auto')) unlocks.push('Automatic bean orders');
+    const gains = [], costs = [];
+    prods.forEach((p) => {
+      gains.push(S.R.mix[p] + '% of customers want ' + PROD[p].name.toLowerCase() + ' first');
+      costs.push(money(PROD[p].cost) + ' a ' + (p === 'cake' ? 'slice' : 'cup') + ' in ingredients');
+    });
+    if (prods.length) gains.push(Math.round(S.R.demand.menuBonus * 100) + '% more customers for each extra item on the menu');
+    if (items.length) costs.push(money(items.reduce((n, t) => n + CAT[t].cost, 0)) + ' of equipment to buy');
+    if (T.unlocks.includes('auto')) { gains.push('Beans reorder themselves before you run dry'); costs.push('Buys sacks even when cash is tight'); }
+    return { unlocks, gains, costs };
+  }
   function refreshResearch() {
     if (resEl.hidden) return;
     const rs = S.research, R = S.R.research, rr = researchRates();
     const key = Sim.TKEYS.map((k) => rs[k].done + ':' + rs[k].weight + ':' + rs[k].complete).join('|');
     if (key === resKey) return; resKey = key;
-    const lost = rr.act.length > 1 ? Math.round(100 - 100 * rr.total / R.rate) : 0, n = rr.act.length;
-    const head = '<header><h2>Research</h2><button type="button" id="resClose" aria-label="Close research">Close</button></header>' +
-      '<p class="res-cap">Capacity <b>' + R.rate + ' units/min</b>' + (n ? ' · ' + n + ' topic' + (n > 1 ? 's' : '') + ' in progress' + (n > 1 ? ', each at <b>1/' + n + '</b> of the pace' : ', at full pace') + (lost ? ' · ' + lost + '% lost to switching' : '') : ' · nothing in progress') + '</p>' +
-      (n > 1 ? '<p class="res-tip">Splitting loses nothing, but nothing pays off until it is finished. One at a time gets the first topic ' + n + '× sooner.</p>' : '');
-    const rows = Sim.TKEYS.map((k) => {
-      const T = Sim.TOPICS[k], r = rs[k], work = R.topics[k].work, pct = work ? Math.floor(100 * r.done / work) : 100;
-      const state = r.complete ? ['good', 'Complete'] : r.weight > 0 ? ['warn', 'In progress'] : r.done > 0 ? ['', 'Paused'] : ['', 'Not started'];
+    const n = rr.act.length;
+    const head = '<header><h2>Research</h2><p class="res-cap">' + R.rate + ' points a minute' + (n > 1 ? ', split ' + n + ' ways' : '') + '. One topic at a time finishes soonest, and nothing pays off until a topic is done.</p><button type="button" id="resClose" aria-label="Close research">Close</button></header>';
+    const cards = Sim.TKEYS.map((k) => {
+      const T = Sim.TOPICS[k], r = rs[k], work = R.topics[k].work, pct = work ? Math.floor(100 * r.done / work) : 100, fx = topicEffects(k);
+      const state = r.complete ? ['done', r.finished > 0 ? 'Done at ' + fmtClock(r.finished) : 'Known from the start'] : r.weight > 0 ? ['active', 'In progress'] : r.done > 0 ? ['paused', 'Paused'] : ['ready', 'Ready to start'];
       const eta = !r.complete && rr.per[k] ? Math.ceil((work - r.done) / rr.per[k]) : null;
-      return '<div class="res-row' + (r.complete ? ' done' : '') + '"><div class="res-top"><b>' + T.name + '</b><span class="pill ' + state[0] + '">' + state[1] + '</span></div>' +
-        '<p>' + esc(T.blurb) + '</p>' +
-        '<div class="progress"><s style="width:' + pct + '%"></s></div>' +
-        '<div class="res-ctl"><span>' + (r.complete ? 'Finished at ' + fmtClock(r.finished) : r.done + '/' + work + ' units' + (eta != null ? ' · about ' + eta + ' min at this split' : '')) + '</span>' +
-        (r.complete ? '' : '<button type="button" data-res="' + k + '" data-w="' + (r.weight ? 0 : 1) + '">' + (r.weight ? 'Pause' : 'Start') + '</button>' +
-          '<button type="button" data-focus="' + k + '"' + (rr.act.length === 1 && r.weight ? ' disabled' : '') + '>Focus</button>') + '</div></div>';
+      const full = Math.ceil((work - r.done) / R.rate);
+      const ctl = r.complete ? '' : r.weight > 0
+        ? '<button type="button" data-res="' + k + '" data-w="0">Pause</button>'
+        : n ? '<button type="button" class="primary" data-focus="' + k + '">Do this next</button><button type="button" class="link" data-res="' + k + '" data-w="1">Run alongside</button>'
+        : '<button type="button" class="primary" data-res="' + k + '" data-w="1">' + (r.done ? 'Resume' : 'Start') + '</button>';
+      return '<article class="res-card ' + state[0] + '"><span class="state">' + state[1] + '</span><h3>' + T.name + '</h3>' +
+        (r.complete ? '' : '<span class="eta">' + (eta != null ? pct + '% · ' + eta + ' min left' : (r.done ? pct + '% · ' : '') + full + ' min at full pace') + '</span><div class="progress"><s style="width:' + pct + '%"></s></div>') +
+        '<ul class="unlocks" aria-label="Unlocks">' + fx.unlocks.map((u) => '<li>' + esc(u) + '</li>').join('') + '</ul>' +
+        (r.complete ? '' : '<ul class="fx">' + fx.gains.map((g) => '<li>' + esc(g) + '</li>').join('') + fx.costs.map((c) => '<li class="cost">' + esc(c) + '</li>').join('') + '</ul>') +
+        (ctl ? '<div class="res-ctl">' + ctl + '</div>' : '') + '</article>';
     }).join('');
-    resEl.innerHTML = head + '<div class="res-list">' + rows + '</div>';
+    resEl.innerHTML = head + '<div class="res-cards">' + cards + '</div>';
   }
   resEl.addEventListener('click', (e) => {
     if (e.target.closest('#resClose')) { setResearch(false); return; }
@@ -1665,11 +1971,12 @@
     sun.position.copy(controls.target).add(new V3(3, 12, 8)); sun.target.position.copy(controls.target);
     renderer.render(scene, cam);
     updateLabels();
-    if (now - hudAt > 200) { hudAt = now; refreshStats(); refreshGoals(); refreshDock(); refreshPanel(); refreshReplayBar(); refreshBotBar(); refreshFlow(); refreshResearch(); }
+    if (now - hudAt > 200) { hudAt = now; refreshStats(); refreshDock(); refreshTickets(); refreshPanel(); refreshReplayBar(); refreshBotBar(); refreshFlow(); refreshResearch(); }
     requestAnimationFrame(frame);
   }
+  renderIcons();
   newGame(SEED);
   resize(); resetView();
-  sel = { kind: 'worker', id: S.workers[0].id }; refreshPanel(true);
+  showSplash();
   requestAnimationFrame(frame);
 })();

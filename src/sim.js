@@ -819,7 +819,7 @@
       const why = canPlace(S, type, x, z, r); if (why) return why;
       const ready = c.mins <= 0, it = addItem(S, type, x, z, r, ready);
       S.cash -= c.cost; S.st.capex += c.cost;
-      ev(S, ready ? label(S, it) + ' marked out' : label(S, it) + ' delivered. A worker needs to build it.', 'info');
+      ev(S, ready ? label(S, it) + ' marked out' : label(S, it) + ' delivered as a crate. A worker needs to build it.', 'info');
       return null;
     }
     if (op === 'remove') {
