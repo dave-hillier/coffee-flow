@@ -22,7 +22,8 @@
   // CAT and PROD follow the current game's rules (a replay code can carry different balance numbers).
   let CAT = Sim.CAT, PROD = Sim.PROD;
   const PKEYS = Sim.PKEYS;
-  const money = (p) => (p < 0 ? '−£' : '£') + (Math.abs(p) / 100).toLocaleString('en-GB', { minimumFractionDigits: Math.abs(p) % 100 ? 2 : 0, maximumFractionDigits: 2 });
+  const GBP = new Intl.NumberFormat('en-GB', { style: 'currency', currency: 'GBP', minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  const money = (p) => GBP.format(p / 100);
   const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 
   // =====================================================================
@@ -940,13 +941,14 @@
     const showMenu = buildMode && !placing;
     buildMenu.hidden = !showMenu; stage.classList.toggle('menu-open', showMenu);
     gridLines.visible = buildMode;
-    buildStatus.innerHTML = !buildMode ? '' : placing
+    buildStatus.hidden = !placing;
+    buildStatus.innerHTML = placing
       ? 'Placing <b>' + esc(CAT[placing.type].name) + '</b> · click the floor · R rotates · Shift-click to place several · Esc to choose again'
-      : 'Choose something to build · Esc or B to leave build mode';
+      : '';
     if (!showMenu) { buildKey = ''; return; }
     const key = Sim.TKEYS.map((k) => S.research[k].complete ? 1 : 0).join('') + BUILD_GROUPS.map(([, ts]) => ts.map((t) => (S.cash >= CAT[t].cost ? 1 : 0) + ':' + S.items.filter((i) => i.type === t).length).join()).join('|');
     if (key === buildKey && !force) return; buildKey = key;
-    buildMenu.innerHTML = '<header><h2>Build</h2><span>' + money(S.cash) + ' to spend · items arrive as crates a worker must build</span></header><div class="bm-row">' +
+    buildMenu.innerHTML = '<header><h2>Build</h2><span>' + money(S.cash) + ' to spend · items arrive as crates a worker must build · Esc or B to leave</span></header><div class="bm-row">' +
       BUILD_GROUPS.map(([g, ts]) => '<div class="bm-sec"><h3>' + g + '</h3><div class="bm-grid">' + ts.map((t) => {
         const c = CAT[t], short = c.cost - S.cash, have = S.items.filter((i) => i.type === t).length, locked = Sim.needsResearch(S, t);
         return '<button type="button" class="bm-item' + (locked ? ' locked' : '') + '" data-place="' + t + '"' + (short > 0 || locked ? ' disabled' : '') + ' title="' + esc(makesText(t) + '. ' + c.blurb + (have ? ' You have ' + have + '.' : '')) + '">' +

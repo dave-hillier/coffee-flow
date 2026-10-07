@@ -72,7 +72,7 @@ button:disabled { opacity: 0.45; cursor: not-allowed; }
 .tag i s { display: block; height: 100%; background: var(--accent); }
 .tag small { display: block; font-weight: 400; color: var(--muted); font-size: 10px; }
 
-.goals, .panel, .ticker, .hint, .tip, .replaybar {
+.goals, .panel, .ticker, .hint, .tip, .replaybar, .build-status {
   position: absolute; background: var(--scrim); border: 1px solid var(--line); border-radius: 4px;
 }
 .goals { left: 12px; top: 12px; padding: 10px 12px; max-width: 290px; }
@@ -150,7 +150,8 @@ ol.builds li button { min-height: 24px; padding: 0 6px; margin-left: 6px; font-s
 
 /* build mode */
 #buildBtn[aria-pressed="true"] span { color: var(--accent-ink); }
-.build-status { color: var(--muted); font-size: 13px; line-height: 1.35; min-width: 0; }
+.build-status { right: 12px; bottom: 12px; margin: 0; padding: 5px 9px; max-width: min(420px, calc(100% - 24px)); box-sizing: border-box; color: var(--muted); font-size: 12px; line-height: 1.35; border-color: var(--accent); }
+.stage.building .hint { display: none; }
 .build-status b { color: var(--accent); font-weight: 600; }
 .stage.building { box-shadow: inset 0 0 0 2px var(--accent); }
 .stage.menu-open .ticker, .stage.menu-open .hint { display: none; }
@@ -354,6 +355,7 @@ table.pt .neg { color: var(--bad); }
     <section class="buildmenu" id="buildmenu" hidden aria-label="Choose something to build"></section>
     <div class="ctx" id="ctx" role="menu" hidden></div>
     <p class="hint" id="hint">Drag to orbit · right-drag to pan · scroll to zoom · Space pauses</p>
+    <p class="build-status" id="buildStatus" aria-live="polite" hidden></p>
     <div class="tip" id="tip" hidden></div>
     <div class="modal" id="playModal" hidden role="dialog" aria-modal="true" aria-labelledby="playTitle">
       <div class="sheet wide">
@@ -391,7 +393,7 @@ table.pt .neg { color: var(--bad); }
   </main>
   <footer class="dock">
     <div class="dock-group"><span class="dock-h">Menu</span><div class="chips" id="menu"></div></div>
-    <div class="dock-group"><span class="dock-h">Build</span><div class="row"><button type="button" id="buildBtn" class="card" aria-pressed="false" aria-controls="buildmenu"><b>Build mode</b><span>B · or right-click the floor</span></button><span class="build-status" id="buildStatus"></span></div></div>
+    <div class="dock-group"><span class="dock-h">Build</span><div class="row"><button type="button" id="buildBtn" class="card" aria-pressed="false" aria-controls="buildmenu"><b>Build mode</b><span>B · or right-click the floor</span></button></div></div>
     <div class="dock-group"><span class="dock-h">Beans</span><div class="supplies" id="supplies"></div></div>
     <div class="dock-group"><span class="dock-h">Staff</span><div class="chips" id="staff"></div></div>
   </footer>
