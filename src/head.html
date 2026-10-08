@@ -67,6 +67,8 @@ button:disabled { opacity: 0.45; cursor: not-allowed; }
 .clock { font-size: 16px; font-weight: 600; font-variant-numeric: tabular-nums; white-space: nowrap; }
 #openBtn { min-width: 84px; }
 #openBtn.is-open { background: var(--good); color: var(--accent-ink); border-color: var(--good); }
+#openBtn[aria-disabled="true"] { opacity: 0.45; cursor: not-allowed; }
+#openBtn[aria-disabled="true"]:hover { border-color: var(--line); }
 #openBtn.call { border-color: var(--accent); box-shadow: 0 0 0 3px rgba(224, 164, 88, 0.3); }
 .more { position: relative; }
 #moreBtn { min-width: 40px; font-size: 18px; line-height: 1; padding-inline: 8px; }
@@ -173,7 +175,7 @@ ol.builds li button { min-height: 24px; padding: 0 6px; margin-left: 6px; font-s
 .tool[aria-disabled="true"] span { opacity: 0.6; }
 .tool[aria-disabled="true"] .prog { visibility: hidden; }
 /* why a tool is greyed out: read out from inside the button, shown on hover or focus as one floating note */
-.tool .why { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+.tool .why, #openWhy { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
 .tool-tip {
   position: fixed; z-index: 7; max-width: 220px; padding: 6px 9px; font-size: 12px; line-height: 1.35; color: var(--fg);
   background: var(--panel); border: 1px solid var(--line); border-radius: 4px; box-shadow: 0 6px 16px rgba(0, 0, 0, 0.4); pointer-events: none;
@@ -489,7 +491,7 @@ section.research header { flex-wrap: wrap; }
     </div>
     <ol class="pass" id="pass" aria-label="Orders in the shop" hidden></ol>
     <div class="controls">
-      <button id="openBtn" type="button" hidden>Open shop</button>
+      <button id="openBtn" type="button" aria-describedby="openWhy">Open shop</button><span class="why" id="openWhy"></span>
       <span class="clock" id="clock" title="Time trading"></span>
       <div class="seg" role="group" aria-label="Game speed" id="speed">
         <button type="button" data-speed="0" aria-pressed="false" title="Pause (Space)" aria-label="Pause">❚❚</button>

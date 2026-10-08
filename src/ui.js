@@ -922,11 +922,14 @@
       if (html !== passHtml) { passHtml = html; passEl.innerHTML = html; }
     }
     const why = S.open ? null : Sim.whyNotOpen(S);
-    openBtn.hidden = !!why && !trading;
-    openBtn.textContent = S.open ? 'Open' : trading ? 'Closed' : 'Open shop';
+    // always there; greyed out with the reason until the shop can open
+    const label = S.open ? 'Open' : trading ? 'Closed' : 'Open shop';
+    if (openBtn.textContent !== label) openBtn.textContent = label;
     openBtn.classList.toggle('is-open', S.open);
     openBtn.classList.toggle('call', !S.open && !why && !trading);
-    openBtn.disabled = !!why; openBtn.title = why || (S.open ? 'Click to close: no new customers will arrive' : 'Let customers in');
+    if (why) { openBtn.setAttribute('aria-disabled', 'true'); openBtn.removeAttribute('title'); } else { openBtn.removeAttribute('aria-disabled'); openBtn.title = S.open ? 'Click to close: no new customers will arrive' : 'Let customers in'; }
+    const whyEl = document.getElementById('openWhy');
+    if (whyEl.textContent !== (why || '')) { whyEl.textContent = why || ''; if (!toolTip.hidden && document.activeElement === openBtn) showWhy({ target: openBtn }); }
   }
 
   // ---------- the ticket rail: steps, problems, milestones and goals ----------
@@ -1101,18 +1104,22 @@
     research: 'Comes in once you serve your first customer'
   };
   const toolLocked = (t) => !revealed.has(t);
-  const toolTip = document.getElementById('toolTip');
+  // one floating note for greyed-out buttons: above the dock, below the top bar
+  const toolTip = document.getElementById('toolTip'); document.body.appendChild(toolTip);
   function showWhy(e) {
-    const b = e.target.closest && e.target.closest('.tool[aria-disabled="true"]');
-    if (!b) { toolTip.hidden = true; return; }
-    toolTip.textContent = b.querySelector('.why').textContent; toolTip.hidden = false;
-    const r = b.getBoundingClientRect(), w = toolTip.offsetWidth;
+    const b = e.target.closest && e.target.closest('.tool[aria-disabled="true"], #openBtn[aria-disabled="true"]');
+    const why = b && (b.querySelector('.why') || document.getElementById(b.getAttribute('aria-describedby')));
+    if (!why || !why.textContent) { toolTip.hidden = true; return; }
+    toolTip.textContent = why.textContent; toolTip.hidden = false;
+    const r = b.getBoundingClientRect(), w = toolTip.offsetWidth, below = r.top < innerHeight / 2;
     toolTip.style.left = Math.max(8, Math.min(innerWidth - w - 8, r.left + r.width / 2 - w / 2)) + 'px';
-    toolTip.style.top = (r.top - toolTip.offsetHeight - 8) + 'px';
+    toolTip.style.top = (below ? r.bottom + 8 : r.top - toolTip.offsetHeight - 8) + 'px';
   }
-  const dockEl = toolsEl.parentElement;
-  dockEl.addEventListener('pointerover', showWhy); dockEl.addEventListener('focusin', showWhy);
-  dockEl.addEventListener('pointerleave', () => { toolTip.hidden = true; }); dockEl.addEventListener('focusout', () => { toolTip.hidden = true; });
+  const hideWhy = () => { toolTip.hidden = true; };
+  [toolsEl.parentElement, openBtn].forEach((el) => {
+    el.addEventListener('pointerover', showWhy); el.addEventListener('focusin', showWhy);
+    el.addEventListener('pointerleave', hideWhy); el.addEventListener('focusout', hideWhy);
+  });
   function lockTool(b, t) {
     const locked = toolLocked(t);
     if ((b.getAttribute('aria-disabled') === 'true') === locked) return;
@@ -1366,7 +1373,7 @@
   });
   menuEl.addEventListener('click', (e) => { const b = e.target.closest('[data-menu]'); if (b) act('menu', b.dataset.menu); });
   staffEl.addEventListener('click', (e) => { if (e.target.closest('#hireBtn')) { if (!act('hire')) { const w = S.workers[S.workers.length - 1]; sel = { kind: 'worker', id: w.id }; refreshPanel(true); } } });
-  document.getElementById('openBtn').addEventListener('click', () => act('open'));
+  document.getElementById('openBtn').addEventListener('click', () => { if (openBtn.getAttribute('aria-disabled') !== 'true') act('open'); });
   document.getElementById('speed').addEventListener('click', (e) => { const b = e.target.closest('[data-speed]'); if (b) setSpeed(+b.dataset.speed); });
   document.getElementById('pixelBtn').addEventListener('click', (e) => {
     pixel = !pixel; e.currentTarget.setAttribute('aria-checked', String(pixel)); stage.classList.toggle('pixel', pixel); resize();
