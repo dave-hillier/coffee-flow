@@ -167,6 +167,17 @@ ol.builds li button { min-height: 24px; padding: 0 6px; margin-left: 6px; font-s
 .tool span { font-size: 12px; color: var(--muted); white-space: nowrap; }
 .tool[aria-expanded="true"] { background: var(--panel-2); border-color: var(--accent); }
 .tool[aria-expanded="true"] span { color: var(--fg); }
+.tool[aria-disabled="true"] { cursor: not-allowed; }
+.tool[aria-disabled="true"]:hover { border-color: transparent; }
+.tool[aria-disabled="true"] img { filter: grayscale(1); opacity: 0.4; }
+.tool[aria-disabled="true"] span { opacity: 0.6; }
+.tool[aria-disabled="true"] .prog { visibility: hidden; }
+/* why a tool is greyed out: read out from inside the button, shown on hover or focus as one floating note */
+.tool .why { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+.tool-tip {
+  position: fixed; z-index: 7; max-width: 220px; padding: 6px 9px; font-size: 12px; line-height: 1.35; color: var(--fg);
+  background: var(--panel); border: 1px solid var(--line); border-radius: 4px; box-shadow: 0 6px 16px rgba(0, 0, 0, 0.4); pointer-events: none;
+}
 .tool.call { border-color: var(--accent); box-shadow: 0 0 0 3px rgba(224, 164, 88, 0.3); }
 .tool .badge { position: absolute; top: -4px; right: 2px; font-size: 10px; font-weight: 600; padding: 0 6px; border-radius: 99px; background: var(--accent); color: var(--accent-ink); }
 .tool.research-tool { min-width: 128px; }
@@ -566,6 +577,7 @@ section.research header { flex-wrap: wrap; }
     </div>
   </main>
   <footer class="dock">
+    <div class="tool-tip" id="toolTip" aria-hidden="true" hidden></div>
     <nav class="tools" id="tools" aria-label="Shop tools">
       <div class="tool-group" role="group" aria-label="Build">
         <button type="button" class="tool" data-tray="counters" aria-expanded="false" aria-controls="tray" title="Counters (B)"><img alt="" data-ico="till"><span>Counters</span></button>
@@ -573,11 +585,11 @@ section.research header { flex-wrap: wrap; }
         <button type="button" class="tool" data-tray="storage" aria-expanded="false" aria-controls="tray" title="Storage"><img alt="" data-ico="stock"><span>Storage</span></button>
       </div>
       <div class="tool-group" role="group" aria-label="Running the shop">
-        <button type="button" class="tool" data-tray="menu" aria-expanded="false" aria-controls="tray" title="What's on the menu" hidden><img alt="" data-ico="cup"><span>Menu</span></button>
-        <button type="button" class="tool" data-tray="beans" aria-expanded="false" aria-controls="tray" title="Beans" hidden><img alt="" data-ico="sack"><span id="beansLabel">Beans</span></button>
-        <button type="button" class="tool" data-tray="staff" aria-expanded="false" aria-controls="tray" title="Staff" hidden><img alt="" data-ico="worker"><span id="staffLabel">Staff</span></button>
+        <button type="button" class="tool" data-tray="menu" aria-expanded="false" aria-controls="tray" title="What's on the menu"><img alt="" data-ico="cup"><span>Menu</span></button>
+        <button type="button" class="tool" data-tray="beans" aria-expanded="false" aria-controls="tray" title="Beans"><img alt="" data-ico="sack"><span id="beansLabel">Beans</span></button>
+        <button type="button" class="tool" data-tray="staff" aria-expanded="false" aria-controls="tray" title="Staff"><img alt="" data-ico="worker"><span id="staffLabel">Staff</span></button>
       </div>
-      <button type="button" class="tool research-tool" id="resTool" aria-expanded="false" aria-controls="research" title="Research (T)" hidden><img alt="" data-ico="research"><span id="resLabel">Research</span><i class="prog" aria-hidden="true"><s id="resProg"></s></i></button>
+      <button type="button" class="tool research-tool" id="resTool" aria-expanded="false" aria-controls="research" title="Research (T)"><img alt="" data-ico="research"><span id="resLabel">Research</span><i class="prog" aria-hidden="true"><s id="resProg"></s></i></button>
     </nav>
   </footer>
 </div>

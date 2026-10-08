@@ -868,7 +868,7 @@
     else if (e.key === 'r' || e.key === 'R') { if (placing) { placing.r = (placing.r + 1) % 4; updateGhost(); refreshBuild(); } }
     else if ((e.key === 'b' || e.key === 'B') && document.getElementById('modal').hidden) { closeCtx(); setBuildMode(!buildMode); }
     else if ((e.key === 'f' || e.key === 'F') && document.getElementById('modal').hidden) setFlow(flowEl.hidden);
-    else if ((e.key === 't' || e.key === 'T') && document.getElementById('modal').hidden) setResearch(resEl.hidden);
+    else if ((e.key === 't' || e.key === 'T') && document.getElementById('modal').hidden && (!toolLocked('research') || !resEl.hidden)) setResearch(resEl.hidden);
     else if (e.key === 'Escape') {
       if (!document.getElementById('modal').hidden) closeModal();
       else if (!playModal.hidden) { closePlay(); setSpeed(wasSpeed); }
@@ -1084,14 +1084,40 @@
     for (const k of Sim.TKEYS) if (rs[k].complete && rs[k].finished > 0 && !seenDone.has(k)) { seenDone.add(k); Sim.TOPICS[k].unlocks.forEach((t) => { if (CAT[t]) freshItems.add(t); }); }
     toolsEl.querySelectorAll('[data-tray]').forEach((b) => {
       const t = b.dataset.tray, build = BUILD_TRAYS[t];
-      if (!build) b.hidden = !revealed.has(t);
+      if (!build) lockTool(b, t);
       const isNew = build ? build[1].some((x) => freshItems.has(x)) : fresh.has(t);
       const badge = b.querySelector('.badge');
       if (isNew && !badge) b.insertAdjacentHTML('beforeend', '<em class="badge">new</em>'); else if (!isNew && badge) badge.remove();
       b.setAttribute('aria-expanded', String(tray === t));
       b.classList.toggle('call', !!(tutorialStep() && tutorialStep().act === 'tray' && tutorialStep().arg === t && tray !== t));
     });
-    resTool.hidden = !revealed.has('research');
+    lockTool(resTool, 'research');
+  }
+  // tools that aren't useful yet stay in the dock, greyed out, saying what brings them in
+  const UNLOCK_WHY = {
+    menu: 'Build a filter brewer to put drinks on the menu',
+    beans: 'Comes in once the shop starts using beans: build a brewer and open up',
+    staff: 'Comes in once you have served 3 customers or a queue builds',
+    research: 'Comes in once you serve your first customer'
+  };
+  const toolLocked = (t) => !revealed.has(t);
+  const toolTip = document.getElementById('toolTip');
+  function showWhy(e) {
+    const b = e.target.closest && e.target.closest('.tool[aria-disabled="true"]');
+    if (!b) { toolTip.hidden = true; return; }
+    toolTip.textContent = b.querySelector('.why').textContent; toolTip.hidden = false;
+    const r = b.getBoundingClientRect(), w = toolTip.offsetWidth;
+    toolTip.style.left = Math.max(8, Math.min(innerWidth - w - 8, r.left + r.width / 2 - w / 2)) + 'px';
+    toolTip.style.top = (r.top - toolTip.offsetHeight - 8) + 'px';
+  }
+  const dockEl = toolsEl.parentElement;
+  dockEl.addEventListener('pointerover', showWhy); dockEl.addEventListener('focusin', showWhy);
+  dockEl.addEventListener('pointerleave', () => { toolTip.hidden = true; }); dockEl.addEventListener('focusout', () => { toolTip.hidden = true; });
+  function lockTool(b, t) {
+    const locked = toolLocked(t);
+    if ((b.getAttribute('aria-disabled') === 'true') === locked) return;
+    if (locked) { b.setAttribute('aria-disabled', 'true'); b.insertAdjacentHTML('beforeend', '<small class="why">' + esc(UNLOCK_WHY[t]) + '</small>'); }
+    else { b.removeAttribute('aria-disabled'); const w = b.querySelector('.why'); if (w) w.remove(); toolTip.hidden = true; }
   }
 
   // ---------- trays: Menu, Beans and Staff ----------
@@ -1215,7 +1241,7 @@
     trayBuild.innerHTML = '<div class="tiles">' + types.map(tileHtml).join('') + '</div><div class="tile-detail" aria-live="polite">' + (focus ? detailHtml(focus) : '') + '</div>';
   }
   toolsEl.addEventListener('click', (e) => {
-    const b = e.target.closest('[data-tray]'); if (!b) return;
+    const b = e.target.closest('[data-tray]'); if (!b || b.getAttribute('aria-disabled') === 'true') return;
     closeCtx(); setTray(b.dataset.tray);
   });
   trayBuild.addEventListener('click', (e) => {
@@ -1761,7 +1787,7 @@
   }
   // the dock chip: what is being researched and how long is left, or a nudge when nothing is
   function refreshResTool() {
-    if (resTool.hidden) return;
+    if (toolLocked('research')) { resTool.classList.remove('idle', 'done'); document.getElementById('resLabel').textContent = 'Research'; return; }
     const rr = researchRates(), open = Sim.TKEYS.filter((k) => !S.research[k].complete);
     const label = document.getElementById('resLabel'), prog = document.getElementById('resProg');
     let text, cls = '', pct = 0;
@@ -1775,7 +1801,7 @@
     prog.style.width = pct + '%';
     resTool.classList.toggle('idle', cls === 'idle'); resTool.classList.toggle('done', cls === 'done');
   }
-  resTool.addEventListener('click', () => { fresh.delete('research'); setResearch(resEl.hidden); });
+  resTool.addEventListener('click', () => { if (toolLocked('research')) return; fresh.delete('research'); setResearch(resEl.hidden); });
   // ---------- the tree: lanes as rows, tiers as columns, chains side by side within a lane ----------
   // where each topic sits: [row within its lane, segment, icon]. Columns come from how deep a topic is in the tree,
   // so hiding finished topics slides the rest to the left.

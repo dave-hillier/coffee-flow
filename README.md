@@ -28,8 +28,8 @@ Controls:
 | Space | Pause |
 | 1–5 | Speed |
 
-The icon row along the bottom opens trays for building, the menu, beans and staff, plus research. Tools appear as
-they become useful. Problems, tutorial steps and goals hang on the ticket rail at the top left and come down when
+The icon row along the bottom opens trays for building, the menu, beans and staff, plus research. Tools that
+aren't useful yet are greyed out, and hovering or focusing one says what brings it in. Problems, tutorial steps and goals hang on the ticket rail at the top left and come down when
 dealt with. Flow charts, replay codes, playtest bots and pixel mode are in the ⋯ menu.
 
 ## Deploying
