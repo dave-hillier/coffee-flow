@@ -10,7 +10,9 @@ const src = (f) => fs.readFileSync(path.join(__dirname, 'src', f), 'utf8');
 const head = src('head.html');
 const split = head.indexOf('<div class="app">');
 if (split < 0) throw new Error('src/head.html must contain <div class="app">');
-const scripts = '<script>\n' + src('sim.js') + '\n' + src('bot.js') + '\n</script>\n<script>\n' + src('ui.js') + '\n</script>\n';
+// lessons.js (workshop scenarios) sits with the domain files; workshop.js loads last, on top of the CoffeeUI hooks
+const scripts = '<script>\n' + src('sim.js') + '\n' + src('bot.js') + '\n' + src('lessons.js') + '\n</script>\n<script>\n' + src('ui.js') + '\n</script>\n' +
+  '<script>\n' + src('workshop.js') + '\n</script>\n';
 
 const page = '<!doctype html>\n<html lang="en">\n<head>\n<meta charset="utf-8">\n' +
   '<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">\n' +

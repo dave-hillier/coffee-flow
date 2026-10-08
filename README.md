@@ -32,6 +32,28 @@ The icon row along the bottom opens trays for building, the menu, beans and staf
 aren't useful yet are greyed out, and hovering or focusing one says what brings it in. Problems, tutorial steps and goals hang on the ticket rail at the top left and come down when
 dealt with. Flow charts, replay codes, playtest bots and pixel mode are in the ⋯ menu.
 
+## Workshop mode
+
+A ~30-minute presenter-led session about flow, for a room or a video call. Pick **Workshop** on the title screen,
+or add `#workshop` to the URL. The presenter shares the screen and plays; before each run the audience predicts what
+will happen by typing A, B or C in the chat. Each round is a scenario played in the real game, then a reveal card
+with the numbers.
+
+| Round | Lesson | Scenario |
+|---|---|---|
+| 1 · Rush hour | Queueing: waits explode near 100% busy | One barista; demand steps from quiet to rush hour |
+| 2 · Start everything | WIP and Little's Law | Three research topics, one at a time or all at once |
+| 3 · The latte art guild | Specialists, and speeding up the wrong step | Only Gustavo may use the espresso machines; then an AI grinder; then a fix |
+| 4 · Impossible orders | Thin slices | Customers want mochas: wait for the full set-up, or open now and add drinks as they land |
+
+Round 4 ends with five quick customer cards, then a wrap-up. Open the same URL with `#script` on a second screen
+for the presenter script; the shared screen never shows the answers. On a card, A/B/C records the room's vote,
+N or → moves on, ← goes back, and Esc hides the card to look at the shop.
+
+The scenarios live in `src/lessons.js`: rule overrides plus scripted actions on the unchanged simulation, ticked
+after every step through the `CoffeeUI.hooks.onTick` hook. A live round nobody touches therefore ends exactly as
+the headless run does, and `test/workshop.test.js` checks that each lesson still holds after balance changes.
+
 ## Deploying
 
 Every push to `main` runs the tests, builds `dist/index.html`, smoke-tests the headless runner, and deploys `dist/`
@@ -47,10 +69,12 @@ src/sim.js      the simulation: shop, customers, workers, stations, buffers, rul
 src/bot.js      the player model: one policy with tunable genes; Solo / Steady / Rush are presets of it.
 src/ui.js       the browser game (three.js rendering, input, panels). Reads and acts on src/sim.js.
 src/head.html   page markup and styles.
+src/lessons.js  Workshop mode scenarios: rules, scripted actions and measures. Pure, like src/sim.js.
+src/workshop.js Workshop mode in the browser: cards, votes, the round strip and reveals. Uses window.CoffeeUI.
 build.js        bundles src/ into dist/index.html, one self-contained page. --fragment also writes a
                 version without <html>/<head>/<body> for hosts that add their own.
 headless/       command-line runner and solver. Loads src/sim.js and src/bot.js unchanged.
-test/           determinism and rules tests.
+test/           determinism and rules tests, and the workshop lessons.
 out/            solver, sweep and explore results (JSON/CSV, not committed).
 docs/           the game design.
 ```
