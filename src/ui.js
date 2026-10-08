@@ -1092,7 +1092,7 @@
       : g.kind === 'trade' ? 'Now ' + p.v + ' an hour. Happy customers bring more.'
       : g.kind === 'handsOff' ? p.v + ' of ' + p.of + ' min with no changes. Any change starts the clock again.'
       : '';
-    return { sev: 'goal', k: (n > 1 ? 'Goal ' + (S.goal + 1) + ' of ' + n : 'Goal') + left, title: esc(g.title), bar: g.kind === 'menu' ? null : Math.max(0, p.v) / p.of, body };
+    return { id: 'goal:' + S.goal, sev: 'goal', k: (n > 1 ? 'Goal ' + (S.goal + 1) + ' of ' + n : 'Goal') + left, title: esc(g.title), bar: g.kind === 'menu' ? null : Math.max(0, p.v) / p.of, body };
   }
   function briefTicket() {
     if (!level || dismissed.has('brief') || S.st.served > 0) return null;
@@ -1186,7 +1186,8 @@
     const shown = list.slice(0, 4), more = list.length - shown.length;
     // keyed: a ticket keeps its element while it stays up, so only new ones drop in and the rest don't replay that
     // (moving an element restarts its animation, so stale ones go first and survivors stay put)
-    const want = shown.map((t) => [t.k + '|' + t.title, 'ticket ' + t.sev, ticketHtml(t)]);
+    // a ticket whose kicker counts down carries a steady id, so it updates in place
+    const want = shown.map((t) => [t.id || t.k + '|' + t.title, 'ticket ' + t.sev, ticketHtml(t)]);
     if (more > 0) want.push(['more', 'ticket more', '+' + more + ' more']);
     const keys = new Set(want.map((w) => w[0])), keep = new Map();
     for (const li of [...ticketsEl.children]) { if (keys.has(li.dataset.key)) keep.set(li.dataset.key, li); else li.remove(); }
