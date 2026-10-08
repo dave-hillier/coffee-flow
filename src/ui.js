@@ -1178,7 +1178,7 @@
       research: S.st.served > 0 || Sim.TKEYS.some((k) => rs[k].started >= 0)
     };
     for (const k in now) if (now[k] && !revealed.has(k)) { revealed.add(k); if (S.t > 0) fresh.add(k); }
-    for (const k of Sim.TKEYS) if (rs[k].complete && rs[k].finished > 0 && !seenDone.has(k)) { seenDone.add(k); Sim.TOPICS[k].unlocks.forEach((t) => { if (CAT[t]) freshItems.add(t); }); }
+    for (const k of Sim.TKEYS) if (rs[k].complete && rs[k].finished > 0 && !seenDone.has(k)) { seenDone.add(k); (Sim.TOPICS[k].unlocks || []).forEach((t) => { if (CAT[t]) freshItems.add(t); }); }
     toolsEl.querySelectorAll('[data-tray]').forEach((b) => {
       const t = b.dataset.tray, build = BUILD_TRAYS[t];
       if (!build) lockTool(b, t);
