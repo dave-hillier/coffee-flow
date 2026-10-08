@@ -125,12 +125,28 @@ replays play out.
 - **New outcome measure.** `dryMins` counts game minutes when drinks were waiting and no machine had beans.
   Bots set a standing order from the `reorderPoint` and `reorderQty` genes.
 
+## Drinks and recipes
+
+- **Every drink has a recipe:** the stops it makes on the way to pickup and the time at each. `Sim.recipe(S, p)`
+  returns it from the current rules. Espresso drinks are ground at a grinder (`products.<p>.grind`) and pulled at
+  the espresso machine (`products.<p>.make`). Milk drinks then visit the milk station (`products.<p>.milk`), and
+  flavoured drinks the syrup station (`products.<p>.syrup`). A station serves one worker at a time, so where it
+  stands and how many there are both matter.
+- **Who wants what.** `mix.<p>` is how many customers in a hundred pick a drink first. Filter, espresso and cake are
+  always in the running; newer drinks only count while they are on the menu. Someone after a milk drink who can't
+  have it falls back to espresso.
+- **Menu.** The Menu tray shows each drink's price and recipe, and takes drinks off or puts them back. A drink is
+  only offered when its research is done and every machine and station in its recipe is built.
+
 ## Research
 
-- **The tree.** Topics sit in six lanes: front counter, bar, menu, beans, customers and team. A topic's `needs`
-  lists the topics that must finish first, so the lanes branch and sometimes join (Latte art needs both House blend
-  and Espresso training).
+- **The tree.** Topics sit in seven lanes: front counter, bar, drinks, menu, beans, customers and team. A topic's
+  `needs` lists the topics that must finish first, and can reach into another lane (the drinks lane grows out of
+  Espresso training).
 - **Unlocks.** Espresso training unlocks the grinder and espresso machine. Cake supplier unlocks the cake display.
+  In the drinks lane, Steamed milk unlocks the milk station and lattes, Microfoam adds cappuccinos, Syrup station
+  unlocks the syrup station and vanilla lattes, then Caramel syrup, Seasonal syrups (gingerbread) and Whipped cream
+  (mocha) add pricier drinks. The three Latte art tiers raise the price of lattes and cappuccinos.
   Standing orders unlocks automatic reordering; until it's researched, beans are ordered by hand. Storage needs
   no research.
 - **Rule changes.** Every other topic changes rule values when it finishes: cup slots on tills and pickup counters

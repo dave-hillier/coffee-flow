@@ -192,7 +192,12 @@ ol.builds li button { min-height: 24px; padding: 0 6px; margin-left: 6px; font-s
 .tool.research-tool.idle { border-color: var(--staff); }
 .tool.research-tool.done .prog { visibility: hidden; }
 .fail { position: absolute; inset: 0; display: grid; place-items: center; padding: 24px; text-align: center; color: var(--muted); }
-.menu-chip { flex: none; display: grid; gap: 1px; text-align: left; padding: 5px 9px; }
+.menu-chip { flex: none; display: grid; grid-template-columns: auto 1fr; column-gap: 7px; row-gap: 1px; align-items: center; text-align: left; padding: 5px 9px; }
+.menu-chip .cup { grid-row: 1 / span 3; width: 32px; height: 32px; image-rendering: pixelated; }
+.menu-chip .stops { display: flex; align-items: center; gap: 1px; }
+.menu-chip .stops img { width: 18px; height: 18px; image-rendering: pixelated; }
+.menu-chip .stops i { font-style: normal; opacity: 0.6; }
+.menu-chip .stops em { font-style: normal; margin-left: 4px; font-variant-numeric: tabular-nums; }
 .menu-chip span { font-size: 11px; font-weight: 400; color: var(--muted); }
 .menu-chip[aria-pressed="true"] span { color: var(--accent-ink); }
 .card { flex: none; display: grid; gap: 1px; text-align: left; padding: 6px 9px; }
@@ -452,6 +457,14 @@ section.research header { flex-wrap: wrap; }
 .tp-needs { margin: 0; font-size: 12px; color: var(--muted); display: flex; flex-wrap: wrap; align-items: center; gap: 4px; }
 .tp-needs .chip { display: inline-flex; align-items: center; box-sizing: border-box; border: 1px solid var(--line); border-radius: 4px; min-height: 26px; padding: 2px 8px; font-size: 12px; font-weight: 400; border-style: dashed; }
 .tp-needs .chip.met { border-style: solid; border-color: var(--good); color: var(--good); }
+/* a recipe: the stops a drink makes, in order, with the time at each */
+.tp-recipe h4 { margin: 0 0 4px; display: flex; align-items: center; gap: 6px; font-size: 13px; font-weight: 600; }
+.tp-recipe h4 img { width: 28px; height: 28px; image-rendering: pixelated; }
+.recipe { list-style: none; margin: 0; padding: 0; display: grid; gap: 2px; counter-reset: stop; }
+.recipe li { display: grid; grid-template-columns: 14px 24px 1fr auto; align-items: center; gap: 6px; font-size: 12px; counter-increment: stop; }
+.recipe li::before { content: counter(stop); color: var(--muted); text-align: right; }
+.recipe img { width: 24px; height: 24px; image-rendering: pixelated; }
+.recipe b { font-weight: 400; color: var(--muted); font-variant-numeric: tabular-nums; }
 .tp-route { margin: 0; font-size: 12px; line-height: 1.4; color: var(--muted); }
 .unlocks { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: 4px; }
 .unlocks li { font-size: 11px; padding: 2px 6px; border-radius: 3px; background: var(--bg); border: 1px solid var(--line); }

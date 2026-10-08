@@ -5,7 +5,7 @@
 (function (root) {
   'use strict';
   const GW = 12, GH = 12, IN = 10;          // grid; interior rows z 0..9, z 10 = front wall (gap at x 4,5), z 11 = street
-  const VERSION = 9;                         // bump whenever a change makes old replays play out differently
+  const VERSION = 10;                         // bump whenever a change makes old replays play out differently
   const TPM = 60;
   const NAMES = ['Pip', 'Bo', 'Mo', 'Jun', 'Ada', 'Kit', 'Rue', 'Fen', 'Ola', 'Tam'];
   const STREET = { x: 5, z: 11 };
@@ -20,17 +20,29 @@
     espresso: { name: 'Espresso machine', w: 2, d: 1, ws: 'front', cs: null, blurb: 'Pulls espresso. Needs a grinder.' },
     pastry:   { name: 'Cake display',     w: 2, d: 1, ws: 'back',  cs: null, blurb: 'Plates cake to order.' },
     stock:    { name: 'Stock area',       w: 1, d: 1, ws: 'any',   cs: null, blurb: 'A patch of floor marked out for sacks of beans. Workers stock it from the door and refill hoppers from it.' },
-    store:    { name: 'Stock cupboard',   w: 1, d: 1, ws: 'front', cs: null, blurb: 'Tidy shelves for sacks of beans. Holds the same as a stock area, but looks the part.' }
+    store:    { name: 'Stock cupboard',   w: 1, d: 1, ws: 'front', cs: null, blurb: 'Tidy shelves for sacks of beans. Holds the same as a stock area, but looks the part.' },
+    milk:     { name: 'Milk station',     w: 1, d: 1, ws: 'front', cs: null, blurb: 'A milk fridge and steaming jugs. Milk drinks get their milk steamed here after the shot is pulled.' },
+    syrup:    { name: 'Syrup station',    w: 1, d: 1, ws: 'front', cs: null, blurb: 'Syrup pumps and whipped cream. Flavoured drinks are finished here on the way to pickup.' }
   };
+  // A product is made at its machine, then visits each of its stations in turn (rule products.<p>.<station> is the time there).
   const PSHAPE = {
-    filter:   { name: 'Filter coffee', machine: 'brewer' },
-    espresso: { name: 'Espresso',      machine: 'espresso', grinds: true },
-    cake:     { name: 'Cake',          machine: 'pastry' }
+    filter:      { name: 'Filter coffee',     machine: 'brewer' },
+    espresso:    { name: 'Espresso',          machine: 'espresso', grinds: true },
+    cake:        { name: 'Cake',              machine: 'pastry' },
+    latte:       { name: 'Latte',             machine: 'espresso', grinds: true, stations: ['milk'] },
+    cappuccino:  { name: 'Cappuccino',        machine: 'espresso', grinds: true, stations: ['milk'] },
+    vanilla:     { name: 'Vanilla latte',     machine: 'espresso', grinds: true, stations: ['milk', 'syrup'] },
+    caramel:     { name: 'Caramel latte',     machine: 'espresso', grinds: true, stations: ['milk', 'syrup'] },
+    gingerbread: { name: 'Gingerbread latte', machine: 'espresso', grinds: true, stations: ['milk', 'syrup'] },
+    mocha:       { name: 'Mocha with cream',  machine: 'espresso', grinds: true, stations: ['milk', 'syrup'] }
   };
-  const PKEYS = ['filter', 'espresso', 'cake'];
+  const PKEYS = Object.keys(PSHAPE);
+  const BASE = ['filter', 'espresso', 'cake'];   // the starting menu; every customer ranks these
   // Research: a tree of topics in lanes. A topic either unlocks things to buy, or sets rule values once finished
   // (the paths in `sets`, to the topic's `to` rule, or by its `pct` rule). `needs` lists the topics that come first.
   // Work, `to` and `pct` are rules.
+  const MILKY_PRICES = ['products.latte.price', 'products.cappuccino.price'];
+  const MAKES = PKEYS.map((p) => 'products.' + p + '.make');
   const TOPICS = {
     rail1:     { lane: 'counter', name: 'Order rail: 8 cups',   sets: ['items.till.slots'], blurb: 'Each till\'s rail holds 8 waiting orders, so the till keeps taking orders through a rush.' },
     rail2:     { lane: 'counter', name: 'Order rail: 12 cups',  sets: ['items.till.slots'], needs: ['rail1'], blurb: 'Each till\'s rail holds 12 waiting orders.' },
@@ -42,12 +54,20 @@
     names:     { lane: 'counter', name: 'Names on cups',        sets: ['collectTime'], needs: ['counter1'], blurb: 'Customers spot their drink at once and leave the counter sooner.' },
     espresso:  { lane: 'bar', name: 'Espresso training',     unlocks: ['grinder', 'espresso'], blurb: 'Lets you buy a grinder and espresso machine.' },
     burrs:     { lane: 'bar', name: 'Sharper burrs',         sets: ['products.espresso.grind'], needs: ['espresso'], blurb: 'Grinders get through a dose in half the time.' },
-    barista1:  { lane: 'bar', name: 'Barista course',        sets: ['products.filter.make', 'products.espresso.make', 'products.cake.make'], needs: ['espresso'], blurb: 'Staff make every drink and plate faster.' },
-    barista2:  { lane: 'bar', name: 'Bar workflow',          sets: ['products.filter.make', 'products.espresso.make', 'products.cake.make'], needs: ['barista1'], blurb: 'A tidier bar: everything is made faster again.' },
+    barista1:  { lane: 'bar', name: 'Barista course',        sets: MAKES, needs: ['espresso'], blurb: 'Staff make every drink and plate faster.' },
+    barista2:  { lane: 'bar', name: 'Bar workflow',          sets: MAKES, needs: ['barista1'], blurb: 'A tidier bar: everything is made faster again.' },
     hoppers:   { lane: 'bar', name: 'Bigger hoppers',        sets: ['items.brewer.hopper', 'items.grinder.hopper'], blurb: 'Brewers and grinders hold twice the beans, so refills come half as often.' },
     knock:     { lane: 'bar', name: 'Deeper knock boxes',    sets: ['items.brewer.knock', 'items.espresso.knock'], needs: ['hoppers'], blurb: 'Knock boxes hold twice the grounds, so they need emptying half as often.' },
+    foam:      { lane: 'drinks', name: 'Steamed milk',       unlocks: ['milk', 'latte'], needs: ['espresso'], blurb: 'Lets you buy a milk station and put lattes on the menu.' },
+    micro:     { lane: 'drinks', name: 'Microfoam',          unlocks: ['cappuccino'], needs: ['foam'], blurb: 'Silky foam for cappuccinos.' },
+    art1:      { lane: 'drinks', name: 'Latte art: hearts',   sets: MILKY_PRICES, needs: ['foam'], blurb: 'A heart on top: milk drinks sell for more.' },
+    art2:      { lane: 'drinks', name: 'Latte art: rosettas', sets: MILKY_PRICES, needs: ['art1'], blurb: 'Rosettas: milk drinks sell for more again.' },
+    art3:      { lane: 'drinks', name: 'Latte art: swans',    sets: MILKY_PRICES, needs: ['art2'], blurb: 'Swans: the dearest milk drinks in town.' },
+    syrup1:    { lane: 'drinks', name: 'Syrup station',      unlocks: ['syrup', 'vanilla'], needs: ['foam'], blurb: 'Lets you buy a syrup station and put vanilla lattes on the menu.' },
+    syrup2:    { lane: 'drinks', name: 'Caramel syrup',      unlocks: ['caramel'], needs: ['syrup1'], blurb: 'Caramel lattes for the syrup station.' },
+    syrup3:    { lane: 'drinks', name: 'Seasonal syrups',    unlocks: ['gingerbread'], needs: ['syrup2'], blurb: 'Gingerbread lattes, the priciest drink on the menu.' },
+    cream:     { lane: 'drinks', name: 'Whipped cream',      unlocks: ['mocha'], needs: ['syrup1'], blurb: 'Mochas topped with cream at the syrup station.' },
     blend:     { lane: 'menu', name: 'House blend',          sets: ['products.filter.price'], blurb: 'A blend of your own: filter coffee sells for more.' },
-    latte:     { lane: 'menu', name: 'Latte art',            sets: ['products.espresso.price'], needs: ['blend', 'espresso'], blurb: 'Espresso drinks sell for more.' },
     cake:      { lane: 'menu', name: 'Cake supplier',        unlocks: ['pastry'], blurb: 'Lets you buy a cake display.' },
     bake:      { lane: 'menu', name: 'Bake in-house',        sets: ['products.cake.cost'], needs: ['cake'], blurb: 'Cake costs less to make.' },
     standing:  { lane: 'beans', name: 'Standing orders',     unlocks: ['auto'], blurb: 'Lets the supplier deliver automatically when beans run low.' },
@@ -71,7 +91,9 @@
     espresso: [[6, 0, 0], [4, 0, 0]],
     pastry: [[9, 3, 0]],
     stock: [[0, 0, 0], [1, 0, 0]],
-    store: [[0, 0, 0], [1, 0, 0]]
+    store: [[0, 0, 0], [1, 0, 0]],
+    milk: [[8, 0, 0]],
+    syrup: [[11, 0, 0]]
   };
 
   // The balance. Money in pence, times in game seconds unless named otherwise.
@@ -79,7 +101,7 @@
   const DEFAULT_RULES = {
     startCash: 60000,
     // The starting setup. Equipment listed here starts built, in the standard layout (LAYOUT below).
-    start: { workers: 1, demand: 0, sacks: 3, till: 0, pickup: 0, brewer: 0, grinder: 0, espresso: 0, pastry: 0, stock: 0, store: 0 },
+    start: { workers: 1, demand: 0, sacks: 3, till: 0, pickup: 0, brewer: 0, grinder: 0, espresso: 0, pastry: 0, stock: 0, store: 0, milk: 0, syrup: 0 },
     // Beans come in sacks, ordered from a supplier and delivered to the door after a lead time.
     supply: { sackDoses: 20, sackCost: 600, leadMins: 20 },
     // Research: capacity in units per game minute, split evenly (by weight) across the topics in progress, so three topics
@@ -91,7 +113,9 @@
       counter1: { work: 150, to: 8 }, counter2: { work: 300, to: 12 }, counter3: { work: 500, to: 16 }, names: { work: 200, to: 8 },
       espresso: { work: 600 }, burrs: { work: 300, pct: -50 }, barista1: { work: 400, pct: -15 }, barista2: { work: 700, pct: -15 },
       hoppers: { work: 200, pct: 100 }, knock: { work: 250, pct: 100 },
-      blend: { work: 300, to: 290 }, latte: { work: 450, to: 370 }, cake: { work: 300 }, bake: { work: 350, to: 70 },
+      foam: { work: 400 }, micro: { work: 300 }, art1: { work: 300, pct: 8 }, art2: { work: 450, pct: 8 }, art3: { work: 650, pct: 10 },
+      syrup1: { work: 450 }, syrup2: { work: 350 }, syrup3: { work: 550 }, cream: { work: 400 },
+      blend: { work: 300, to: 290 }, cake: { work: 300 }, bake: { work: 350, to: 70 },
       standing: { work: 250 }, roaster: { work: 300, to: 10 }, wholesale: { work: 450, to: 450 },
       music: { work: 250, to: 1700 }, loyalty: { work: 400, to: 0.025 }, press: { work: 600, to: 2.6 },
       fitout: { work: 250, pct: -40 }, shoes: { work: 300, to: 8 }, rota: { work: 350, to: 7 } } },
@@ -106,7 +130,8 @@
     orderTime: 75,
     collectTime: 15,
     patience: { min: 1200, spread: 1200 },
-    mix: { espresso: 45, filter: 35, cake: 20 },               // % whose first choice it is
+    // how many customers in a hundred pick each first; drinks beyond the starting three only count while on the menu
+    mix: { espresso: 45, filter: 35, cake: 20, latte: 25, cappuccino: 20, vanilla: 12, caramel: 10, gingerbread: 8, mocha: 10 },
     fit: [1, 0.7, 0.45],                                     // satisfaction for 1st, 2nd, 3rd choice
     demand: { base: 9, perLevel: 45, menuBonus: 0.15, growAt: 0.55, gain: 0.015, walkoutLoss: 0.02, max: 2 },
     items: {
@@ -117,12 +142,21 @@
       espresso: { cost: 38000, buildMins: 14, knock: 25 },
       pastry:   { cost: 22000, buildMins: 8 },
       stock:    { cost: 0,     buildMins: 0, sacks: 10 },               // floor space, in sacks; free and ready at once
-      store:    { cost: 4000,  buildMins: 2, sacks: 10 }                // shelf space, in sacks
+      store:    { cost: 4000,  buildMins: 2, sacks: 10 },               // shelf space, in sacks
+      milk:     { cost: 9000,  buildMins: 3 },
+      syrup:    { cost: 7000,  buildMins: 3 }
     },
     products: {
       filter:   { price: 250, cost: 10,  make: 90, doses: 1 },              // cost is the cup; beans are bought separately
       espresso: { price: 320, cost: 30,  make: 150, grind: 30, doses: 1 },
-      cake:     { price: 380, cost: 120, make: 60 }
+      cake:     { price: 380, cost: 120, make: 60 },
+      // milk drinks: the shot at the espresso machine, then seconds at each station
+      latte:       { price: 360, cost: 45, make: 150, grind: 30, doses: 1, milk: 40 },
+      cappuccino:  { price: 370, cost: 45, make: 150, grind: 30, doses: 1, milk: 50 },
+      vanilla:     { price: 400, cost: 60, make: 150, grind: 30, doses: 1, milk: 40, syrup: 15 },
+      caramel:     { price: 420, cost: 65, make: 150, grind: 30, doses: 1, milk: 40, syrup: 15 },
+      gingerbread: { price: 460, cost: 75, make: 150, grind: 30, doses: 1, milk: 40, syrup: 20 },
+      mocha:       { price: 440, cost: 80, make: 150, grind: 30, doses: 1, milk: 40, syrup: 30 }
     }
   };
   const clone = (o) => JSON.parse(JSON.stringify(o));
@@ -273,7 +307,16 @@
     const P = PSHAPE[p];
     if (!S.items.some((i) => i.built && i.type === P.machine)) return false;
     if (P.grinds && !S.items.some((i) => i.built && i.type === 'grinder')) return false;
-    return true;
+    if ((P.stations || []).some((t) => !S.items.some((i) => i.built && i.type === t))) return false;
+    return !needsResearch(S, p);
+  }
+  // a product's recipe: each stop on the way to pickup and the seconds spent there, from the current rules
+  function recipe(S, p) {
+    const P = S.R.PROD[p], out = [];
+    if (P.grind) out.push({ type: 'grinder', secs: P.grind });
+    out.push({ type: P.machine, secs: P.make });
+    for (const t of P.stations || []) out.push({ type: t, secs: P[t] });
+    return out;
   }
   const offered = (S) => PKEYS.filter((p) => !S.menuOff[p] && unlocked(S, p));
   function rate(S) {
@@ -354,8 +397,8 @@
     const lastOf = (t) => S.items.filter((i) => i.built && i.type === t).length <= 1;
     const live = (pred) => S.cups.some((c) => c.state !== 'ready' && pred(c));
     if (it.type === 'pickup' && lastOf('pickup') && S.cups.some((c) => c.state !== 'ready')) return 'Drinks in progress need it';
-    if (it.type === 'grinder' && lastOf('grinder') && live((c) => c.prod === 'espresso')) return 'Espresso orders need it';
-    for (const p of PKEYS) if (PSHAPE[p].machine === it.type && lastOf(it.type) && live((c) => c.prod === p)) return 'Open orders need it';
+    if (it.type === 'grinder' && lastOf('grinder') && live((c) => PSHAPE[c.prod].grinds)) return 'Espresso orders need it';
+    for (const p of PKEYS) if ((PSHAPE[p].machine === it.type || (PSHAPE[p].stations || []).includes(it.type)) && lastOf(it.type) && live((c) => c.prod === p)) return 'Open orders need it';
     return null;
   }
   function whyNotOpen(S) {
@@ -609,7 +652,20 @@
       { t: 'go', cell: m.wc, status: 'Going to ' + label(S, m) },
       { t: 'do', fn: () => { if (!P.grind) { m.beans -= P.doses; S.st.beansUsed += P.doses; } } },
       { t: 'work', n: P.make, st: m.id, status: 'Making ' + lname },
-      { t: 'do', fn: () => { m.res = null; cup.made = true; if (knockOf(S, m)) m.grounds++; S.cash -= P.cost; S.st.costs += P.cost; } },
+      { t: 'do', fn: () => { m.res = null; cup.made = true; if (knockOf(S, m)) m.grounds++; S.cash -= P.cost; S.st.costs += P.cost; } }
+    );
+    // milk drinks: steam at the milk station, then flavour at the syrup station
+    for (const type of P.stations || []) {
+      let st = null; const name = SHAPE[type].name.toLowerCase();
+      steps.push(
+        { t: 'go', cell: () => { st = nearest(S, w, (i) => i.built && i.type === type && (i.res == null || i.res === w.id)) || nearest(S, w, (i) => i.built && i.type === type); return st && st.wc; }, status: 'Going to the ' + name, lost: 'Waiting: no ' + name },
+        { t: 'wait', cond: () => st && (st.res == null || st.res === w.id), status: 'Waiting for the ' + name, face: () => st && st.id },
+        { t: 'do', fn: () => { st.res = w.id; } },
+        { t: 'work', n: P[type], st: () => st.id, status: type === 'milk' ? 'Steaming milk' : 'Adding ' + (cup.prod === 'mocha' ? 'cream' : 'syrup') },
+        { t: 'do', fn: () => { st.res = null; } }
+      );
+    }
+    steps.push(
       { t: 'go', cell: () => { pk = nearest(S, w, (i) => i.built && i.type === 'pickup'); return pk && pk.wc; }, any: () => pk && pk.wsc, status: 'Taking it to pickup', lost: 'Waiting: no pickup counter' },
       { t: 'wait', cond: () => { if (cup.waste) return true; const p = pickupHere(S, w); return p && p.buf.length < p.cap; }, status: 'Blocked: pickup counter full', face: () => { const p = pickupHere(S, w); return p && p.id; } },
       { t: 'do', fn: () => {
@@ -764,17 +820,21 @@
   }
 
   // ---------- customers ----------
+  const fitOf = (S, rank) => S.R.fit[Math.min(rank, S.R.fit.length - 1)];
   function spawn(S) {
     const tills = S.items.filter((i) => i.built && i.type === 'till'); if (!tills.length) return;
     const menu = offered(S); if (!menu.length) return;
-    const M = S.R.mix, k = S.r() % (M.espresso + M.filter + M.cake);
-    const first = k < M.espresso ? 'espresso' : k < M.espresso + M.filter ? 'filter' : 'cake';
-    const rest = PKEYS.filter((p) => p !== first); if (S.r() % 2) rest.reverse();
-    const prefs = [first].concat(rest);
+    // first choice: the starting three, plus any newer drink on the menu; someone after a milk drink falls back to espresso
+    const M = S.R.mix, pool = ['espresso', 'filter', 'cake'].concat(PKEYS.filter((p) => !BASE.includes(p) && menu.includes(p)));
+    let k = S.r() % pool.reduce((n, p) => n + M[p], 0), first = pool[0];
+    for (const p of pool) { if (k < M[p]) { first = p; break; } k -= M[p]; }
+    const rest = BASE.filter((p) => p !== first); if (S.r() % 2) rest.reverse();
+    if (!BASE.includes(first)) { rm(rest, 'espresso'); rest.unshift('espresso'); }
+    const prefs = [first].concat(rest, PKEYS.filter((p) => p !== first && !rest.includes(p)));
     let rank = 0; while (!menu.includes(prefs[rank])) rank++;
     let till = tills[0]; tills.forEach((t) => { if (t.queue.length < till.queue.length) till = t; });
     const id = S.nextId++, sx = (S.r() % 2) ? 11 : 0, ex = (S.r() % 2) ? 11 : 0;
-    const c = { id, x: sx, z: 11, path: [], prog: 0, spd: S.R.customerStep, tx: null, tz: null, prefs, prod: prefs[rank], fit: S.R.fit[rank],
+    const c = { id, x: sx, z: 11, path: [], prog: 0, spd: S.R.customerStep, tx: null, tz: null, prefs, prod: prefs[rank], fit: fitOf(S, rank),
       arrive: S.t, pat: S.R.patience.min + S.r() % Math.max(1, S.R.patience.spread), state: 'queue', till: till.id, cup: null, paid: false, exit: { x: ex, z: 11 },
       wait: 0, outcome: null, look: S.r() % 8, anim: 'idle', face: null, gone: false, carry: null };
     till.queue.push(id); S.customers.push(c); S.cmap[id] = c; S.st.arrived++; S.flow.arrived++;
@@ -785,7 +845,7 @@
     if (!menu.includes(c.prod)) {
       let rank = c.prefs.findIndex((p) => menu.includes(p) || (PSHAPE[p].machine && unlocked(S, p)));
       if (rank < 0) { c.state = 'leave'; c.outcome = -1; S.st.abandoned++; S.flow.lostQueue++; c.tx = null; return; }
-      c.prod = c.prefs[rank]; c.fit = S.R.fit[rank];
+      c.prod = c.prefs[rank]; c.fit = fitOf(S, rank);
     }
     const P = S.R.PROD[c.prod];
     const cup = { id: S.nextId++, prod: c.prod, cust: c.id, till: till.id, state: 'queued', waste: false, made: false, at: till.id };
@@ -1083,5 +1143,5 @@
   }
 
   root.CoffeeSim = { VERSION, create, step, act, canPlace, whyNotRemove, whyNotOpen, offered, unlocked, rate, label, dimsOf, footprint,
-    wcell, ccell, encode, decode, hash, rulesWith, flatRules, DEFAULT_RULES, topicChanges, routeTo, prereqs, SHAPE, LAYOUT, DOOR, TOPICS, TKEYS, needsResearch, capOf, activityOf, CAT, PROD, PKEYS, GW, GH, IN, TPM };
+    wcell, ccell, encode, decode, hash, rulesWith, flatRules, DEFAULT_RULES, topicChanges, routeTo, prereqs, SHAPE, LAYOUT, DOOR, TOPICS, TKEYS, BASE, recipe, needsResearch, capOf, activityOf, CAT, PROD, PKEYS, GW, GH, IN, TPM };
 })(typeof window !== 'undefined' ? window : globalThis);

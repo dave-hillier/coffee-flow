@@ -79,6 +79,13 @@
     x.fillStyle = '#7c5530'; x.fillRect(0, 0, 16, 2); x.fillRect(0, 14, 16, 2); x.fillRect(0, 0, 2, 16); x.fillRect(14, 0, 2, 16);
     for (let k = 0; k < 14; k++) x.fillRect(1 + k, 1 + k, 2, 1);
   });
+  // milk and syrup stations, and the milk drinks' cups
+  Object.assign(mat, {
+    bottle: L(0xeaf4ff, { transparent: true, opacity: 0.28, depthWrite: false }), milkCap: L(0x3d7fc4), pump: L(0x1c1f24),
+    foam: L(0xead7b8), cocoa: L(0x6b3f22), cream2: L(0xfbf7ee)
+  });
+  // syrup colours, also the sleeves of the flavoured cups
+  const SYRUP = { vanilla: L(0xe8cf86), caramel: L(0xc0702a), gingerbread: L(0x8c4424), mocha: L(0x4e2c1a) };
   mat.brick = L(0xffffff, { map: texBrick });
   mat.crate = L(0xffffff, { map: texCrate });
   const floorMats = {};
@@ -152,6 +159,45 @@
     cyl(g, mat.coffee, 0, 0.7, 0, 0.25, 0.15, 0.28);
     cyl(g, mat.glass, 0, 0.7, 0, 0.3, 0.16, 0.55);
     cyl(g, mat.black, 0, 1.25, 0, 0.31, 0.31, 0.05);
+    return g;
+  }
+  // a fridge under the counter, milk on top, steel jugs ready to steam
+  function milkStation() {
+    const g = counter(1, 1, mat.top);
+    blk(g, mat.steel, 0.1, 0.2, 0.955, 0.8, 0.68, 0.03);
+    blk(g, mat.steelDeep, 0.78, 0.36, 0.985, 0.04, 0.36, 0.03);
+    blk(g, mat.blackDeep, 0.1, 0.2, 0.95, 0.8, 0.03, 0.04);
+    const top = new THREE.Group(); top.position.set(0.5, TOP, 0.5); g.add(top);
+    [[-0.27, -0.2], [-0.1, -0.24]].forEach(([x, z]) => {
+      blk(top, mat.white, x - 0.06, 0, z - 0.06, 0.12, 0.26, 0.12);
+      blk(top, mat.milkCap, x - 0.03, 0.26, z - 0.03, 0.06, 0.04, 0.06);
+      blk(top, mat.milkCap, x - 0.061, 0.08, z - 0.061, 0.122, 0.05, 0.122);
+    });
+    [[0.12, 0.1], [0.3, -0.12]].forEach(([x, z]) => {
+      cyl(top, mat.steel, x, 0, z, 0.07, 0.06, 0.16);
+      blk(top, mat.steel, x - 0.015, 0.12, z + 0.06, 0.03, 0.03, 0.05);
+      blk(top, mat.steelDeep, x - 0.1, 0.06, z - 0.01, 0.04, 0.025, 0.02);
+    });
+    blk(top, mat.steelDeep, -0.36, 0, 0.12, 0.3, 0.02, 0.2);
+    return g;
+  }
+  // pump bottles: clear glass, the syrup showing through, and a whipped cream canister
+  function syrupStation() {
+    const g = new THREE.Group();
+    blk(g, mat.steelDeep, -0.42, 0, -0.32, 0.84, 0.02, 0.3);
+    ['vanilla', 'caramel', 'gingerbread', 'mocha'].forEach((k, i) => {
+      const x = -0.31 + i * 0.205, z = -0.17;
+      cyl(g, SYRUP[k], x, 0.025, z, 0.06, 0.06, 0.25, 10);
+      cyl(g, mat.bottle, x, 0.02, z, 0.075, 0.075, 0.32, 10);
+      cyl(g, mat.bottle, x, 0.34, z, 0.03, 0.045, 0.06, 8);
+      cyl(g, mat.pump, x, 0.4, z, 0.032, 0.032, 0.05, 8);
+      cyl(g, mat.pump, x, 0.45, z, 0.012, 0.012, 0.1, 6);
+      blk(g, mat.pump, x - 0.02, 0.53, z - 0.02, 0.04, 0.035, 0.13);
+    });
+    cyl(g, mat.steel, 0.28, 0.02, 0.17, 0.065, 0.065, 0.3, 12);
+    cyl(g, mat.pump, 0.28, 0.32, 0.17, 0.04, 0.06, 0.05, 10);
+    blk(g, mat.pump, 0.265, 0.37, 0.17, 0.03, 0.03, 0.09);
+    [[-0.26, 0.18], [-0.08, 0.2]].forEach(([x, z]) => cyl(g, mat.white, x, 0, z, 0.065, 0.052, 0.18, 10));
     return g;
   }
   function batchBrewer() {
@@ -350,7 +396,9 @@
     lid: new THREE.CylinderGeometry(0.076, 0.076, 0.025, 10), band: new THREE.CylinderGeometry(0.074, 0.07, 0.03, 10),
     saucer: new THREE.CylinderGeometry(0.1, 0.09, 0.015, 12), small: new THREE.CylinderGeometry(0.055, 0.042, 0.08, 10),
     plate: new THREE.CylinderGeometry(0.12, 0.1, 0.015, 12), slab: new THREE.BoxGeometry(0.14, 0.08, 0.1),
-    slot: new THREE.CylinderGeometry(0.085, 0.085, 0.004, 12)
+    slot: new THREE.CylinderGeometry(0.085, 0.085, 0.004, 12),
+    mug: new THREE.CylinderGeometry(0.075, 0.055, 0.1, 12), foam: new THREE.CylinderGeometry(0.068, 0.068, 0.006, 12),
+    dust: new THREE.CylinderGeometry(0.03, 0.03, 0.004, 8), whip: new THREE.SphereGeometry(0.068, 10, 6, 0, Math.PI * 2, 0, Math.PI / 2)
   };
   const mCup = (g, m, x, y, z) => { const o = new THREE.Mesh(g, m); o.position.set(x, y, z); o.castShadow = true; return o; };
   function makeCup(prod) {
@@ -361,6 +409,17 @@
     } else if (prod === 'espresso') {
       g.add(mCup(cupGeo.saucer, mat.white, 0, 0.008, 0), mCup(cupGeo.small, mat.white, 0, 0.055, 0));
       band = mCup(cupGeo.band, mat.amberB, 0, 0.06, 0); band.scale.set(0.8, 1, 0.8);
+    } else if (prod === 'latte' || prod === 'cappuccino') {
+      // a wide cup on a saucer, foam on top: cappuccinos get a dusting of cocoa
+      g.add(mCup(cupGeo.saucer, mat.white, 0, 0.008, 0), mCup(cupGeo.mug, mat.white, 0, 0.065, 0), mCup(cupGeo.foam, mat.foam, 0, 0.116, 0));
+      if (prod === 'cappuccino') g.add(mCup(cupGeo.dust, mat.cocoa, 0, 0.12, 0));
+      band = mCup(cupGeo.band, mat.amberB, 0, 0.06, 0); band.scale.set(0.95, 1, 0.95);
+    } else if (SYRUP[prod]) {
+      // takeaway cups in the syrup's colour; the mocha has whipped cream instead of a lid
+      g.add(mCup(cupGeo.body, mat.white, 0, 0.1, 0), mCup(cupGeo.sleeve, SYRUP[prod], 0, 0.09, 0));
+      if (prod === 'mocha') g.add(mCup(cupGeo.whip, mat.cream2, 0, 0.2, 0), mCup(cupGeo.dust, mat.cocoa, 0, 0.245, 0));
+      else g.add(mCup(cupGeo.lid, mat.white, 0, 0.21, 0));
+      band = mCup(cupGeo.band, mat.amberB, 0, 0.16, 0);
     } else {
       g.add(mCup(cupGeo.plate, mat.white, 0, 0.008, 0), mCup(cupGeo.slab, mat.pastry, 0, 0.055, 0));
       band = mCup(cupGeo.band, mat.amberB, 0, 0.11, 0); band.scale.set(0.5, 0.6, 0.5);
@@ -391,6 +450,8 @@
     if (type === 'grinder') return onCounter(1, 1, mat.top, grinder);
     if (type === 'espresso') return onCounter(2, 1, mat.top, starterEspresso);
     if (type === 'store') return storeShelf();
+    if (type === 'milk') return milkStation();
+    if (type === 'syrup') return onCounter(1, 1, mat.top, syrupStation);
     if (type === 'stock') return stockPallet();
     return onCounter(2, 1, mat.top, pastryCase);
   }
@@ -525,7 +586,8 @@
       r.render(sc, c); const url = r.domElement.toDataURL(); sc.remove(obj); return url;
     };
     const withSacks = (m, n) => { fillShelf({ inner: { children: [m] } }, n); return m; };
-    ['till', 'pickup', 'brewer', 'grinder', 'espresso', 'pastry'].forEach((t) => { ICONS[t] = shoot(modelFor(t)); });
+    ['till', 'pickup', 'brewer', 'grinder', 'espresso', 'pastry', 'milk', 'syrup'].forEach((t) => { ICONS[t] = shoot(modelFor(t)); });
+    PKEYS.forEach((p) => { ICONS['cup:' + p] = shoot(makeCup(p)); });
     ICONS.stock = shoot(withSacks(modelFor('stock'), 6));
     ICONS.store = shoot(withSacks(modelFor('store'), 7));
     ICONS.cup = shoot(makeCup('filter'));
@@ -1006,6 +1068,13 @@
       if (!r.complete || r.finished <= 0 || S.t - r.finished > 3600 || dismissed.has('res:' + k)) continue;
       const items = (Sim.TOPICS[k].unlocks || []).filter((t) => CAT[t]);
       if (Sim.TOPICS[k].sets) { out.push({ sev: 'good', k: 'Research done', title: Sim.TOPICS[k].name, body: Sim.TOPICS[k].blurb, dismiss: 'res:' + k }); continue; }
+      const newProds = (Sim.TOPICS[k].unlocks || []).filter((p) => PROD[p]);
+      if (!items.length && newProds.length) {
+        const can = newProds.filter((p) => Sim.unlocked(S, p));
+        out.push(can.length ? { sev: 'good', k: 'Research done', title: Sim.TOPICS[k].name, body: can.map((p) => PROD[p].name).join(' and ') + ' can go on the menu now.', btn: 'Open Menu', act: 'tray', arg: 'menu', dismiss: 'res:' + k }
+          : { sev: 'good', k: 'Research done', title: Sim.TOPICS[k].name, body: newProds.map((p) => PROD[p].name).join(' and ') + ' needs ' + (PROD[newProds[0]].stations || []).filter((t) => !S.items.some((i) => i.built && i.type === t)).map((t) => CAT[t].name.toLowerCase()).join(' and ') + ' first.', dismiss: 'res:' + k });
+        continue;
+      }
       out.push(items.length
         ? { sev: 'good', k: 'Research done', title: Sim.TOPICS[k].name, body: 'You can build ' + items.map((t) => CAT[t].name.toLowerCase()).join(' and ') + ' now.', btn: 'Build it', act: 'tray', arg: trayOf(items[items.length - 1]), dismiss: 'res:' + k }
         : { sev: 'good', k: 'Research done', title: Sim.TOPICS[k].name, body: 'Set up a standing order in Beans.', btn: 'Open Beans', act: 'tray', arg: 'beans', dismiss: 'res:' + k });
@@ -1170,7 +1239,11 @@
       dockKey = key;
       menuEl.innerHTML = PKEYS.filter((p) => Sim.unlocked(S, p)).map((p) => {
         const P = PROD[p], on = !S.menuOff[p];
-        return '<button type="button" class="menu-chip" data-menu="' + p + '" aria-pressed="' + on + '" title="' + (on ? 'On the menu. Click to stop offering it.' : 'Off the menu. Click to offer it.') + '"><b>' + P.name + '</b><span>' + money(P.price) + (on ? ' · offered' : ' · off') + '</span></button>';
+        const steps = Sim.recipe(S, p), secs = steps.reduce((n, r) => n + r.secs, 0);
+        return '<button type="button" class="menu-chip" data-menu="' + p + '" aria-pressed="' + on + '" title="' + (on ? 'On the menu. Click to stop offering it.' : 'Off the menu. Click to offer it.') + '">' +
+          '<img class="cup" alt="" src="' + (ICONS['cup:' + p] || '') + '"><b>' + P.name + '</b><span>' + money(P.price) + (on ? ' · offered' : ' · off') + '</span>' +
+          '<span class="stops" aria-label="Made at ' + esc(steps.map((r) => CAT[r.type].name.toLowerCase()).join(', then ')) + ', ' + secsText(secs) + ' in all">' +
+          steps.map((r) => '<img alt="" src="' + (ICONS[r.type] || '') + '">').join('<i aria-hidden="true">›</i>') + '<em>' + secsText(secs) + '</em></span></button>';
       }).join('');
       staffEl.innerHTML = '<ul>' + S.workers.map((w) => '<li><button type="button" data-worker="' + w.id + '"><b>' + esc(w.name) + '</b><span>' + (w.leaving ? 'leaving' : money(S.R.wagePerMin * 60) + ' an hour') + '</span></button></li>').join('') + '</ul>' +
         '<div class="row"><button type="button" class="card" id="hireBtn"' + (S.cash < S.R.hireCost || S.workers.length >= S.R.maxWorkers ? ' disabled' : '') + '><b>Hire a worker</b><span>' + money(S.R.hireCost) + ' to hire, then ' + money(S.R.wagePerMin * 60) + ' an hour · ' + S.workers.length + ' of ' + S.R.maxWorkers + '</span></button></div>';
@@ -1189,16 +1262,18 @@
   // cursor into a ghost; after placing, the tray comes back. Esc steps back one level. Right-click opens a menu for whatever is under the cursor.
   const trayEl = document.getElementById('tray'), trayBuild = document.getElementById('trayBuild');
   const buildStatus = document.getElementById('buildStatus'), ctxEl = document.getElementById('ctx');
-  const BUILD_TRAYS = { counters: ['Counters', ['till', 'pickup']], machines: ['Machines', ['brewer', 'grinder', 'espresso', 'pastry']], storage: ['Storage', ['stock', 'store']] };
-  const SHORT = { till: 'Till', pickup: 'Pickup', brewer: 'Brewer', grinder: 'Grinder', espresso: 'Espresso', pastry: 'Cake case', stock: 'Stock area', store: 'Cupboard' };
+  const BUILD_TRAYS = { counters: ['Counters', ['till', 'pickup']], machines: ['Machines', ['brewer', 'grinder', 'espresso', 'pastry', 'milk', 'syrup']], storage: ['Storage', ['stock', 'store']] };
+  const SHORT = { till: 'Till', pickup: 'Pickup', brewer: 'Brewer', grinder: 'Grinder', espresso: 'Espresso', pastry: 'Cake case', stock: 'Stock area', store: 'Cupboard', milk: 'Milk', syrup: 'Syrups' };
   const trayOf = (type) => Object.keys(BUILD_TRAYS).find((k) => BUILD_TRAYS[k][1].includes(type));
   let buildMode = false, buildKey = '', tray = null, lastBuildTray = 'counters', tileFocus = null;
   const makesText = (t) => {
-    const ps = PKEYS.filter((p) => PROD[p].machine === t || (t === 'grinder' && PROD[p].grinds));
+    // products this helps make, leaving out ones still waiting on research of their own
+    const ps = PKEYS.filter((p) => (PROD[p].machine === t || (t === 'grinder' && PROD[p].grinds) || (PROD[p].stations || []).includes(t)) &&
+      (!Sim.needsResearch(S, p) || Sim.needsResearch(S, p) === Sim.needsResearch(S, t)));
     if (t === 'till') return 'Where customers order and pay';
     if (t === 'pickup') return 'Where finished drinks wait';
     if (t === 'stock' || t === 'store') return 'Holds ' + S.R.items[t].sacks + ' sacks of beans close to the machines';
-    return ps.length ? (t === 'grinder' ? 'Needed for ' : 'Unlocks ') + ps.map((p) => PROD[p].name.toLowerCase()).join(', ') : '';
+    return ps.length ? (t === 'grinder' || CAT[t].w === 1 && t !== 'brewer' ? 'Needed for ' : 'Unlocks ') + ps.map((p) => PROD[p].name.toLowerCase()).join(', ') : '';
   };
   function setTray(t) {
     if (t && t === tray && !placing) t = null;
@@ -1457,7 +1532,7 @@
     if (hc) rows.push('<dt>Beans in hopper</dt><dd>' + meterOf(it.beans, hc, it.beans <= hc / 4) + it.beans + '/' + hc + ' cups</dd>');
     if (kc) rows.push('<dt>Grounds bin</dt><dd>' + meterOf(it.grounds, kc, it.grounds >= kc * 0.8) + it.grounds + '/' + kc + '</dd>');
     if (it.chore != null && S.wmap[it.chore]) rows.push('<dt>Chore</dt><dd>' + esc(S.wmap[it.chore].name) + ' is on it</dd>');
-    const makes = PKEYS.filter((p) => PROD[p].machine === it.type);
+    const makes = PKEYS.filter((p) => (PROD[p].machine === it.type || (PROD[p].stations || []).includes(it.type)) && !Sim.needsResearch(S, p));
     if (makes.length) rows.push('<dt>Makes</dt><dd>' + makes.map((p) => PROD[p].name).join(', ') + '</dd>');
     rows.push('<dt>Staffed by</dt><dd>' + (crew.length ? esc(crew.map((w) => w.name).join(', ')) : 'nobody') + '</dd>');
     return '<h2>' + esc(name) + '<small>' + c.w + '×' + c.d + '</small></h2><p>' + esc(c.blurb) + '</p><dl class="kv">' + rows.join('') + '</dl>' +
@@ -1812,13 +1887,15 @@
   // ---------- the tree: lanes as rows, tiers as columns, chains side by side within a lane ----------
   // where each topic sits: [row within its lane, segment, icon]. Columns come from how deep a topic is in the tree,
   // so hiding finished topics slides the rest to the left.
-  const LANES = [['counter', 'Front counter'], ['bar', 'Bar'], ['menu', 'Menu'], ['beans', 'Beans'], ['guests', 'Customers'], ['team', 'Team']];
+  const LANES = [['counter', 'Front counter'], ['bar', 'Bar'], ['drinks', 'Drinks'], ['menu', 'Menu'], ['beans', 'Beans'], ['guests', 'Customers'], ['team', 'Team']];
   const TREE = {
     rail1: [0, 0, 'till'], rail2: [0, 0, 'till'], rail3: [0, 0, 'till'], cards: [1, 0, 'till'],
     counter1: [0, 1, 'pickup'], counter2: [0, 1, 'pickup'], counter3: [0, 1, 'pickup'], names: [1, 1, 'cup'],
     espresso: [0, 0, 'espresso'], burrs: [0, 0, 'grinder'], barista1: [1, 0, 'espressoCup'], barista2: [1, 0, 'worker'],
     hoppers: [0, 1, 'grinder'], knock: [0, 1, 'brewer'],
-    blend: [0, 0, 'cup'], latte: [0, 0, 'espressoCup'], cake: [0, 1, 'pastry'], bake: [0, 1, 'cake'],
+    foam: [0, 0, 'milk'], micro: [0, 0, 'cup:cappuccino'], art1: [1, 0, 'cup:latte'], art2: [1, 0, 'cup:latte'], art3: [1, 0, 'cup:latte'],
+    syrup1: [2, 0, 'syrup'], syrup2: [2, 0, 'cup:caramel'], syrup3: [2, 0, 'cup:gingerbread'], cream: [3, 0, 'cup:mocha'],
+    blend: [0, 0, 'cup'], cake: [0, 1, 'pastry'], bake: [0, 1, 'cake'],
     standing: [0, 0, 'sack'], roaster: [0, 1, 'sack'], wholesale: [0, 1, 'store'],
     music: [0, 0, 'customer'], loyalty: [0, 0, 'customer'], press: [0, 0, 'research'],
     shoes: [0, 0, 'worker'], rota: [0, 0, 'worker'], fitout: [0, 1, 'stock']
@@ -1832,7 +1909,8 @@
     'products.filter.make': ['Pouring a filter', secs], 'products.espresso.make': ['Pulling an espresso', secs], 'products.cake.make': ['Plating cake', secs],
     'items.brewer.hopper': ['Brewer hopper', (v) => v + ' doses'], 'items.grinder.hopper': ['Grinder hopper', (v) => v + ' doses'],
     'items.brewer.knock': ['Brewer knock box', (v) => v + ' drinks'], 'items.espresso.knock': ['Espresso knock box', (v) => v + ' drinks'],
-    'products.filter.price': ['Filter coffee', money], 'products.espresso.price': ['Espresso', money], 'products.cake.cost': ['Cake ingredients', money],
+    'products.filter.price': ['Filter coffee', money], 'products.espresso.price': ['Espresso', money],
+    'products.latte.price': ['Latte', money], 'products.cappuccino.price': ['Cappuccino', money], 'products.cake.cost': ['Cake ingredients', money],
     'supply.leadMins': ['Bean delivery', mins], 'supply.sackCost': ['Sack of beans', money],
     'patience.min': ['Shortest wait before leaving', (v) => Math.round(v / 60) + ' min'],
     'demand.gain': ['Trade growth', (v) => (v * 100).toFixed(1) + '%'], 'demand.max': ['Busiest trade', (v) => '×' + v],
@@ -1853,9 +1931,11 @@
     const shown = Sim.TKEYS.filter((k) => !(hideDone && S.research[k].complete));
     const depth = {};
     const d = (k) => depth[k] || (depth[k] = 1 + Math.max(0, ...Sim.prereqs(k).filter((p) => shown.includes(p)).map(d)));
-    const segW = [0, 0]; shown.forEach((k) => { segW[TREE[k][1]] = Math.max(segW[TREE[k][1]], d(k)); });
-    // columns: lane names, the first set of chains, a narrow gap, the second set
-    const template = 'var(--lane-w)' + (segW[0] ? ' repeat(' + segW[0] + ', var(--col-w))' : '') + (segW[0] && segW[1] ? ' 20px' : '') + (segW[1] ? ' repeat(' + segW[1] + ', var(--col-w))' : '');
+    // each lane's second set of chains starts one column after its own first set ends
+    const segW = {}; shown.forEach((k) => { const l = Sim.TOPICS[k].lane; segW[l] = segW[l] || [0, 0]; segW[l][TREE[k][1]] = Math.max(segW[l][TREE[k][1]], d(k)); });
+    const colOf = (k) => { const w = segW[Sim.TOPICS[k].lane]; return (TREE[k][1] && w[0] ? w[0] + 1 : 0) + d(k); };
+    const cols = Math.max(1, ...shown.map(colOf));
+    const template = 'var(--lane-w) repeat(' + cols + ', var(--col-w))';
     const rows = []; let gridRow = 1;
     const cell = {};
     LANES.forEach(([lane, label]) => {
@@ -1863,7 +1943,7 @@
       if (!mine.length) return;
       const used = [...new Set(mine.map((k) => TREE[k][0]))].sort();
       rows.push({ lane, label, row: gridRow, span: used.length });
-      mine.forEach((k) => { cell[k] = { row: gridRow + used.indexOf(TREE[k][0]), col: (TREE[k][1] && segW[0] ? segW[0] + 1 : 0) + d(k) }; });
+      mine.forEach((k) => { cell[k] = { row: gridRow + used.indexOf(TREE[k][0]), col: colOf(k) }; });
       gridRow += used.length;
     });
     return { shown, cell, rows, template };
@@ -1876,23 +1956,40 @@
       const ch = Sim.topicChanges(S.R, k), done = S.research[k].complete;
       // a percentage across many machines reads better as one line
       const pct = S.R.research.topics[k].pct;
-      const lines = ch.length > 3 ? [{ label: 'Build times', text: Math.abs(pct) + '% shorter' }]
+      const lines = ch.length > 3 ? [{ label: ch[0].path.endsWith('buildMins') ? 'Build times' : 'Making times', text: Math.abs(pct) + '% shorter' }]
         : ch.map((c) => ({ label: STAT[c.path][0], from: done ? null : STAT[c.path][1](c.from), to: STAT[c.path][1](done ? c.from : c.to) }));
       return { changes: lines, unlocks: [], gains: [], costs: [] };
     }
     const items = (T.unlocks || []).filter((t) => CAT[t]);
-    const prods = PKEYS.filter((p) => items.includes(PROD[p].machine));
+    const prods = topicProducts(k);
     const unlocks = items.map((t) => CAT[t].name + ' ' + money(CAT[t].cost)).concat(prods.map((p) => PROD[p].name + ' on the menu ' + money(PROD[p].price)));
     if ((T.unlocks || []).includes('auto')) unlocks.push('Automatic bean orders');
     const gains = [], costs = [];
+    // share of customers who would pick it first, against the menu as it stands
+    const pool = Sim.BASE.concat(PKEYS.filter((o) => !Sim.BASE.includes(o) && Sim.offered(S).includes(o)));
     prods.forEach((p) => {
-      gains.push(S.R.mix[p] + '% of customers want ' + PROD[p].name.toLowerCase() + ' first');
+      const total = pool.concat(pool.includes(p) ? [] : [p]).reduce((n, o) => n + S.R.mix[o], 0);
+      gains.push(Math.round(100 * S.R.mix[p] / total) + '% of customers would pick ' + PROD[p].name.toLowerCase() + ' first');
       costs.push(money(PROD[p].cost) + ' a ' + (p === 'cake' ? 'slice' : 'cup') + ' in ingredients');
     });
     if (prods.length) gains.push(Math.round(S.R.demand.menuBonus * 100) + '% more customers for each extra item on the menu');
     if (items.length) costs.push(money(items.reduce((n, t) => n + CAT[t].cost, 0)) + ' of equipment to buy');
     if ((T.unlocks || []).includes('auto')) { gains.push('Beans reorder themselves before you run dry'); costs.push('Buys sacks even when cash is tight'); }
-    return { changes: [], unlocks, gains, costs };
+    return { changes: [], unlocks, gains, costs, recipes: prods };
+  }
+  // the products a topic puts on the menu: ones it names, and ones its machines make that no other topic holds back
+  function topicProducts(k) {
+    const U = Sim.TOPICS[k].unlocks || [];
+    const heldBy = (p) => Sim.TKEYS.find((o) => (Sim.TOPICS[o].unlocks || []).includes(p));
+    return PKEYS.filter((p) => U.includes(p) || (U.includes(PROD[p].machine) && (!heldBy(p) || heldBy(p) === k)));
+  }
+  const STOP = { grinder: 'Grind', brewer: 'Brew', espresso: 'Pull the shot', pastry: 'Plate it', milk: 'Steam milk', syrup: 'Add syrup' };
+  const secsText = (n) => n >= 60 ? Math.floor(n / 60) + 'm ' + String(n % 60).padStart(2, '0') + 's' : n + 's';
+  // a recipe as an ordered list of stops, each with its station's icon and the time there
+  function recipeHtml(p, cls) {
+    const steps = Sim.recipe(S, p);
+    return '<ol class="recipe ' + (cls || '') + '" aria-label="Recipe for ' + esc(PROD[p].name) + '">' + steps.map((r) =>
+      '<li><img alt="" src="' + (ICONS[r.type] || '') + '"><span>' + (p === 'mocha' && r.type === 'syrup' ? 'Add cream' : STOP[r.type]) + '</span><b>' + secsText(r.secs) + '</b></li>').join('') + '</ol>';
   }
   const minsLeft = (k, rr) => { const r = S.research[k], work = S.R.research.topics[k].work; return Math.ceil((work - r.done) / (rr.per[k] || S.R.research.rate)); };
   // the detail pane: the selected topic, what it changes, what it needs and what to do about it
@@ -1918,6 +2015,7 @@
       '<p class="tp-blurb">' + esc(T.blurb) + '</p>' +
       (fx.changes.length ? '<dl class="tp-changes">' + fx.changes.map((c) => '<div><dt>' + esc(c.label) + '</dt><dd>' + (c.text ? esc(c.text) : (c.from ? '<del>' + esc(c.from) + '</del> ' : '') + '<ins>' + esc(c.to) + '</ins>') + '</dd></div>').join('') + '</dl>' : '') +
       (fx.unlocks.length ? '<ul class="unlocks" aria-label="Unlocks">' + fx.unlocks.map((u) => '<li>' + esc(u) + '</li>').join('') + '</ul>' : '') +
+      (fx.recipes && fx.recipes.length ? fx.recipes.map((p) => '<div class="tp-recipe"><h4><img alt="" src="' + (ICONS['cup:' + p] || '') + '">' + esc(PROD[p].name) + '</h4>' + recipeHtml(p) + '</div>').join('') : '') +
       (st !== 'done' && (fx.gains.length || fx.costs.length) ? '<ul class="fx">' + fx.gains.map((g) => '<li>' + esc(g) + '</li>').join('') + fx.costs.map((c) => '<li class="cost">' + esc(c) + '</li>').join('') + '</ul>' : '') +
       (needs.length ? '<p class="tp-needs">Needs ' + needs.map((p) => hideDone && S.research[p].complete ? '<span class="chip met">' + esc(Sim.TOPICS[p].name) + '</span>' : '<button type="button" class="chip ' + (S.research[p].complete ? 'met' : '') + '" data-k="' + p + '">' + esc(Sim.TOPICS[p].name) + '</button>').join(' ') + '</p>' : '') +
       (st === 'locked' && !planned ? '<p class="tp-route">Planning researches ' + route.slice(0, -1).map((o) => esc(Sim.TOPICS[o].name)).join(', then ') + ', then this: about ' + routeMins + ' min at full pace.</p>' : '') +

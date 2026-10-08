@@ -147,11 +147,11 @@ test('capacity research grows the order rail and pickup counter to 8, 12 and 16 
 
 test('a planned topic researches what it needs first, in turn, then itself', () => {
   const S = Sim.create(1);
-  assert.strictEqual(Sim.act(S, 'plan', 'latte'), null);
-  assert.deepStrictEqual(S.resPlan, ['blend', 'espresso', 'latte']);
-  assert.strictEqual(S.research.blend.weight, 1, 'starts with the first step');
-  while (!S.research.latte.complete) Sim.step(S);
-  assert.ok(S.research.blend.finished < S.research.espresso.finished && S.research.espresso.finished < S.research.latte.finished);
+  assert.strictEqual(Sim.act(S, 'plan', 'art2'), null);
+  assert.deepStrictEqual(S.resPlan, ['espresso', 'foam', 'art1', 'art2']);
+  assert.strictEqual(S.research.espresso.weight, 1, 'starts with the first step');
+  while (!S.research.art2.complete) Sim.step(S);
+  assert.ok(S.research.espresso.finished < S.research.foam.finished && S.research.art1.finished < S.research.art2.finished);
   assert.deepStrictEqual(S.resPlan, []);
   Sim.act(S, 'plan', 'rail3'); Sim.act(S, 'research', 'music', 1);
   assert.deepStrictEqual(S.resPlan, [], 'choosing by hand drops the plan');
@@ -165,7 +165,22 @@ test('finished research changes the rules it names, for new and existing equipme
   assert.strictEqual(S.R.items.brewer.hopper, 80);
   assert.strictEqual(S.R.PROD.filter.make, 65, 'two 15% cuts compound: 90, 77, 65');
   assert.ok(S.workers.every((w) => w.spd === 8));
-  assert.strictEqual(Sim.create(1, null, { 'research.enabled': 0 }).R.PROD.espresso.price, 370, 'with research off, everything is known');
+  assert.strictEqual(Sim.create(1, null, { 'research.enabled': 0 }).R.PROD.latte.price, 462, 'with research off, everything is known: 360 up 8%, 8%, then 10%');
+});
+
+test('a flavoured latte follows its recipe: grinder, espresso machine, milk station, syrup station, pickup', () => {
+  const rules = { 'start.till': 1, 'start.pickup': 1, 'start.grinder': 1, 'start.espresso': 1, 'start.milk': 1, 'start.syrup': 1, 'start.workers': 2,
+    'research.topics.espresso.work': 0, 'research.topics.foam.work': 0, 'research.topics.syrup1.work': 0,
+    'mix.espresso': 0, 'mix.filter': 0, 'mix.cake': 0, 'mix.vanilla': 100 };
+  const S = Sim.create(3, null, rules);
+  assert.deepStrictEqual(Sim.recipe(S, 'vanilla').map((r) => r.type + ' ' + r.secs), ['grinder 30', 'espresso 150', 'milk 40', 'syrup 15']);
+  assert.deepStrictEqual(Sim.offered(S), ['espresso', 'latte', 'vanilla']);
+  Sim.act(S, 'menu', 'espresso'); Sim.act(S, 'menu', 'latte'); Sim.act(S, 'order', 5); Sim.act(S, 'open');
+  const busy = new Set();
+  for (let t = 0; t < 2 * 3600; t++) { Sim.step(S); for (const it of S.items) if (it.busy === S.t) busy.add(it.type); }
+  assert.ok(S.st.served > 3, 'vanilla lattes get served: ' + S.st.served);
+  for (const t of ['grinder', 'espresso', 'milk', 'syrup']) assert.ok(busy.has(t), t + ' was worked at');
+  assert.match(Sim.act(Sim.create(1), 'place', 'syrup', 11, 0, 0), /Needs research: Syrup station/);
 });
 
 test('cumulative flow lines stay ordered and their gaps equal stock at each stage', () => {
