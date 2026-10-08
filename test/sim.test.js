@@ -131,6 +131,20 @@ test('research: splitting shares the pace, so one at a time finishes the first s
   assert.match(Sim.act(Sim.create(1), 'place', 'grinder', 9, 0, 0), /Needs research/);
 });
 
+test('capacity research grows the order rail and pickup counter to 8, 12 and 16 cups, one tier at a time', () => {
+  const S = Sim.create(1, null, { 'start.till': 1, 'start.pickup': 1 });
+  const caps = () => S.items.map((it) => it.type + ' ' + it.cap).sort();
+  const finish = (k) => { assert.strictEqual(Sim.act(S, 'research', k, 1), null, k); while (!S.research[k].complete) Sim.step(S); };
+  assert.deepStrictEqual(caps(), ['pickup 4', 'till 4']);
+  assert.match(Sim.act(S, 'research', 'rail2', 1), /Needs research: Order rail: 8 cups/);
+  finish('rail1'); finish('counter1');
+  assert.deepStrictEqual(caps(), ['pickup 8', 'till 8']);
+  finish('rail2'); finish('rail3'); finish('counter2');
+  assert.deepStrictEqual(caps(), ['pickup 12', 'till 16']);
+  Sim.act(S, 'place', 'till', 2, 6, 0);
+  assert.strictEqual(S.items[S.items.length - 1].cap, 16, 'a till placed later gets the researched rail');
+});
+
 test('cumulative flow lines stay ordered and their gaps equal stock at each stage', () => {
   const S = Sim.create(4, null, { 'start.till': 1, 'start.pickup': 1, 'start.brewer': 1, 'start.workers': 2, 'start.demand': 0.8, 'research.topics.standing.work': 0 });
   Sim.act(S, 'open'); Sim.act(S, 'auto', 40, 3);

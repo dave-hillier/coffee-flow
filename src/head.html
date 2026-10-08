@@ -222,11 +222,8 @@ ol.builds li button { min-height: 24px; padding: 0 6px; margin-left: 6px; font-s
 .rail { position: absolute; left: 12px; top: 12px; z-index: 2; width: max-content; max-width: min(660px, calc(100% - 330px)); min-width: 180px; pointer-events: none; }
 .rail::before { content: ''; display: block; height: 7px; border-radius: 4px; background: linear-gradient(#cfd6de, #8a96a3 60%, #5b6672); box-shadow: 0 2px 4px rgba(0, 0, 0, 0.5); }
 .tickets { list-style: none; margin: -2px 0 0; padding: 0 0 0 8px; display: flex; flex-wrap: wrap; gap: 8px; align-items: flex-start; }
-.ticket { pointer-events: auto; position: relative; width: 150px; box-sizing: border-box; display: grid; gap: 4px; padding: 11px 10px 10px; background: #f3e9d2; color: #2b2118; box-shadow: 0 4px 9px rgba(0, 0, 0, 0.45); transform-origin: top center; }
+.ticket { pointer-events: auto; position: relative; width: 150px; box-sizing: border-box; display: grid; gap: 4px; padding: 11px 10px 10px; background: #f3e9d2; color: #2b2118; box-shadow: 0 4px 9px rgba(0, 0, 0, 0.45); transform-origin: top center; transform: rotate(var(--tilt, 0deg)); }
 .ticket::before { content: ''; position: absolute; top: 0; left: 0; right: 0; height: 5px; background: var(--sev, var(--staff)); }
-.ticket:nth-child(3n + 1) { transform: rotate(-1deg); }
-.ticket:nth-child(3n + 2) { transform: rotate(0.7deg); }
-.ticket:nth-child(3n) { transform: rotate(-0.3deg); }
 .ticket.crit { --sev: var(--bad); }
 .ticket.warn { --sev: var(--accent); }
 .ticket.good { --sev: var(--good); }

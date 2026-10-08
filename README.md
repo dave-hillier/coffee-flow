@@ -130,6 +130,9 @@ replays play out.
 - **Topics.** Espresso training unlocks the grinder and espresso machine. Cake supplier unlocks the cake display.
   Standing orders unlocks automatic reordering; until it's researched, beans are ordered by hand. Storage needs
   no research.
+- **Capacity tiers.** Tills and pickup counters start with 4 cup slots. Order rail (`rail1`–`rail3`) and pickup
+  counter (`counter1`–`counter3`) topics raise every till or pickup counter to 8, 12 and then 16 slots. Each tier
+  needs the one before it, and the research drawer shows only the next tier in each chain.
 - **Shared capacity.** `research.rate` units per game minute are split across the topics in progress by weight,
   set with the action `research topic 0..3`.
 - **Even split.** Three topics in progress each go at a third of the pace, and nothing is lost by splitting.
@@ -137,6 +140,7 @@ replays play out.
   no later. That is the design doc's cost of delay. `research.switchPct` can add an optional context-switching
   loss per extra topic; it is 0 by default.
 - **Rules.** `research.topics.<name>.work` sets each topic's size, and `0` means the topic is known from the start.
+  Capacity tiers also take `research.topics.<name>.slots`.
   `research.enabled=0` unlocks everything.
 - **Bots.** `researchSerial` (one topic at a time or all at once) and `standingFirst` are policy genes. Steady
   focuses; Rush researches everything at once.

@@ -32,7 +32,14 @@
   const TOPICS = {
     espresso: { name: 'Espresso training', unlocks: ['grinder', 'espresso'], blurb: 'Lets you buy a grinder and espresso machine.' },
     cake:     { name: 'Cake supplier',     unlocks: ['pastry'],              blurb: 'Lets you buy a cake display.' },
-    standing: { name: 'Standing orders',   unlocks: ['auto'],                blurb: 'Lets the supplier deliver automatically when beans run low.' }
+    standing: { name: 'Standing orders',   unlocks: ['auto'],                blurb: 'Lets the supplier deliver automatically when beans run low.' },
+    // capacity tiers: each raises one item's slots to the topic's `slots` rule, and needs the tier before it
+    rail1:    { name: 'Order rail: 8 cups',      unlocks: [], raises: 'till',   blurb: 'Each till\'s rail holds 8 waiting orders.' },
+    rail2:    { name: 'Order rail: 12 cups',     unlocks: [], raises: 'till',   needs: 'rail1', blurb: 'Each till\'s rail holds 12 waiting orders.' },
+    rail3:    { name: 'Order rail: 16 cups',     unlocks: [], raises: 'till',   needs: 'rail2', blurb: 'Each till\'s rail holds 16 waiting orders.' },
+    counter1: { name: 'Pickup counter: 8 cups',  unlocks: [], raises: 'pickup', blurb: 'Each pickup counter holds 8 finished drinks.' },
+    counter2: { name: 'Pickup counter: 12 cups', unlocks: [], raises: 'pickup', needs: 'counter1', blurb: 'Each pickup counter holds 12 finished drinks.' },
+    counter3: { name: 'Pickup counter: 16 cups', unlocks: [], raises: 'pickup', needs: 'counter2', blurb: 'Each pickup counter holds 16 finished drinks.' }
   };
   const TKEYS = Object.keys(TOPICS);
   // Standard layout: where starting equipment goes and where the bots build. [x, z, rotation] per copy.
@@ -58,7 +65,9 @@
     // Research: capacity in units per game minute, split evenly (by weight) across the topics in progress, so three topics
     // each go at a third of the pace. Nothing pays off until a topic is finished: that is the whole cost of splitting.
     // switchPct (optional, 0 by default) adds a context-switching loss per extra topic. work 0 = known from the start.
-    research: { enabled: 1, rate: 10, switchPct: 0, topics: { espresso: { work: 600 }, cake: { work: 300 }, standing: { work: 250 } } },
+    research: { enabled: 1, rate: 10, switchPct: 0, topics: { espresso: { work: 600 }, cake: { work: 300 }, standing: { work: 250 },
+      rail1: { work: 150, slots: 8 }, rail2: { work: 300, slots: 12 }, rail3: { work: 500, slots: 16 },
+      counter1: { work: 150, slots: 8 }, counter2: { work: 300, slots: 12 }, counter3: { work: 500, slots: 16 } } },
     // Worker chores: tipping a sack into a hopper, emptying a knock box, dumping grounds at the door.
     chores: { refill: 15, empty: 20, dump: 10 },
     wagePerMin: 15,           // per worker per game minute (£9/h)
@@ -359,7 +368,7 @@
     const c = S.R.CAT[type];
     S.counts[type] = (S.counts[type] || 0) + 1;
     const it = { id: S.nextId++, type, x, z, r, n: S.counts[type], built, work: built ? c.mins * TPM : 0, total: c.mins * TPM,
-      res: null, buf: [], queue: [], cap: c.cap || 0, util: 0, busy: -1,
+      res: null, buf: [], queue: [], cap: capOf(S, type), util: 0, busy: -1,
       beans: built ? (S.R.items[type].hopper || 0) : 0, grounds: 0, sacks: 0, chore: null };
     it.wc = wcell(it); it.cc = ccell(it); it.wsc = side(it, c.ws);
     S.items.push(it); S.imap[it.id] = it;
@@ -874,6 +883,7 @@
       const k = a[2], r = S.research[k];
       if (!r) return 'Unknown research';
       if (r.complete) return 'Already researched';
+      const pre = TOPICS[k].needs; if (pre && !S.research[pre].complete && (a[3] | 0) > 0) return 'Needs research: ' + TOPICS[pre].name;
       r.weight = Math.max(0, Math.min(3, a[3] | 0));
       return null;
     }
@@ -942,6 +952,12 @@
     for (const k of TKEYS) if (TOPICS[k].unlocks.includes(thing) && !S.research[k].complete) return k;
     return null;
   }
+  // slots for an item type: the base rule, raised by any finished capacity topic
+  function capOf(S, type) {
+    let n = S.R.CAT[type].cap || 0;
+    for (const k of TKEYS) if (TOPICS[k].raises === type && S.research[k].complete) n = Math.max(n, S.R.research.topics[k].slots);
+    return n;
+  }
   function researchStep(S) {
     const rs = S.research, active = TKEYS.filter((k) => !rs[k].complete && rs[k].weight > 0);
     if (!active.length) return;
@@ -959,6 +975,7 @@
         r.complete = true; r.weight = 0; r.finished = S.t;
         ev(S, 'Research complete: ' + TOPICS[k].name + '. ' + TOPICS[k].blurb, 'good');
         mark(S, 'research', TOPICS[k].name);
+        const t = TOPICS[k].raises; if (t) for (const it of S.items) if (it.type === t) it.cap = capOf(S, t);
       }
     });
   }
@@ -999,5 +1016,5 @@
   }
 
   root.CoffeeSim = { VERSION, create, step, act, canPlace, whyNotRemove, whyNotOpen, offered, unlocked, rate, label, dimsOf, footprint,
-    wcell, ccell, encode, decode, hash, rulesWith, flatRules, DEFAULT_RULES, SHAPE, LAYOUT, DOOR, TOPICS, TKEYS, needsResearch, activityOf, CAT, PROD, PKEYS, GW, GH, IN, TPM };
+    wcell, ccell, encode, decode, hash, rulesWith, flatRules, DEFAULT_RULES, SHAPE, LAYOUT, DOOR, TOPICS, TKEYS, needsResearch, capOf, activityOf, CAT, PROD, PKEYS, GW, GH, IN, TPM };
 })(typeof window !== 'undefined' ? window : globalThis);

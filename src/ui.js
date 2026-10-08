@@ -368,10 +368,14 @@
     g.add(band); g.userData.band = band;
     return g;
   }
-  const SLOTS = {
-    till: [[0.2, 0.32], [0.44, 0.32], [0.2, 0.66], [0.44, 0.66]],
-    pickup: [[0.2, 0.5], [0.45, 0.5], [0.7, 0.5], [0.95, 0.5]]
-  };
+  // cup spots on a counter top: rows of four beside the till or the sign, one more row per four slots researched
+  const SLOT_X = { till: 0.15, pickup: 0.2 };
+  function slotsOf(it) {
+    if (!(it.type in SLOT_X)) return null;
+    const rows = Math.max(1, Math.ceil(it.cap / 4)), out = [];
+    for (let i = 0; i < it.cap; i++) out.push([SLOT_X[it.type] + (i % 4) * 0.22, rows === 1 ? 0.5 : 0.2 + Math.floor(i / 4) * 0.6 / (rows - 1)]);
+    return out;
+  }
 
   // =====================================================================
   // Views
@@ -432,7 +436,7 @@
     root.userData.pick = { kind: 'item', id: it.id };
     const inner = new THREE.Group(); inner.position.set(-c.w / 2, 0, -c.d / 2); root.add(inner);
     inner.add(it.built ? modelFor(it.type) : crateModel(c.w, c.d));
-    if (it.built && SLOTS[it.type]) SLOTS[it.type].forEach(([x, z]) => add(inner, cupGeo.slot, mat.slot, x, TOP + 0.003, z));
+    if (it.built && slotsOf(it)) slotsOf(it).forEach(([x, z]) => add(inner, cupGeo.slot, mat.slot, x, TOP + 0.003, z));
     const olm = B(0xe0a458, { transparent: true, opacity: 0.9, depthWrite: false });
     const ol = new THREE.Group(); inner.add(ol);
     const th = 0.06;
@@ -440,7 +444,7 @@
       const m = new THREE.Mesh(new THREE.BoxGeometry(ww, 0.02, dd), olm); m.position.set(x + ww / 2, 0.012, z + dd / 2); ol.add(m);
     });
     ol.visible = false;
-    const v = { root, inner, ol, olm, built: it.built, tag: null, tagKey: '' };
+    const v = { root, inner, ol, olm, built: it.built, cap: it.cap, slots: it.built && slotsOf(it), tag: null, tagKey: '' };
     if (!it.built) v.tag = tagFor('crate');
     // stock tiles are laid in groups and show their sacks on the pallet, so they go without a gauge
     else if (S.R.items[it.type].hopper || S.R.items[it.type].knock || (S.R.items[it.type].sacks && it.type !== 'stock')) v.gauge = tagFor('gauge');
@@ -547,7 +551,7 @@
   function newGame(seed, log, rules) {
     clearViews();
     S = Sim.create(seed, log, rules); CAT = S.R.CAT; PROD = S.R.PROD;
-    sel = null; hover = null; placing = null; armed = null; seenEvent = 0; ticker.length = 0; buildMode = false; tray = null; accessKey = ''; revealed.clear(); fresh.clear(); freshItems.clear(); seenDone.clear(); dismissed.clear(); goalsMet.clear(); ticketsHtml = ''; dockKey = ''; suppliesKey = ''; pileN = -1; flowKey = ''; resKey = ''; if (typeof closeCtx === 'function') closeCtx();
+    sel = null; hover = null; placing = null; armed = null; seenEvent = 0; ticker.length = 0; buildMode = false; tray = null; accessKey = ''; revealed.clear(); fresh.clear(); freshItems.clear(); seenDone.clear(); dismissed.clear(); goalsMet.clear(); ticketsEl.textContent = ''; dockKey = ''; suppliesKey = ''; pileN = -1; flowKey = ''; resKey = ''; if (typeof closeCtx === 'function') closeCtx();
     watching = !!(log && log.length); bot = null;
     document.getElementById('scenario').textContent = 'Scenario 1 · seed ' + seed + (Object.keys(S.over).length ? ' · custom rules' : '');
     document.getElementById('scenario').title = Object.entries(S.over).map(([k, v]) => k + ' = ' + v).join('\n');
@@ -608,7 +612,7 @@
     for (const it of S.items) {
       seen.add(it.id);
       let v = itemViews.get(it.id);
-      if (!v || v.built !== it.built) { if (v) { world.remove(v.root); if (v.tag) v.tag.remove(); if (v.gauge) v.gauge.remove(); } v = makeItemView(it); itemViews.set(it.id, v); world.add(v.root); }
+      if (!v || v.built !== it.built || v.cap !== it.cap) { if (v) { world.remove(v.root); if (v.tag) v.tag.remove(); if (v.gauge) v.gauge.remove(); } v = makeItemView(it); itemViews.set(it.id, v); world.add(v.root); }
       if (it.built && holdsSacks(it) && v.sackN !== it.sacks) { v.sackN = it.sacks; fillShelf(v, it.sacks); }
     }
     itemViews.forEach((v, id) => { if (!seen.has(id)) { world.remove(v.root); if (v.tag) v.tag.remove(); if (v.gauge) v.gauge.remove(); itemViews.delete(id); } });
@@ -667,7 +671,7 @@
         const w = S.workers.find((o) => o.carry === cup.id); const wv = w && workerViews.get(w.id);
         if (wv) { parent = wv.rig.carry; v.root.position.set(0, 0, 0); }
       } else {
-        const it = S.imap[cup.at], iv = it && itemViews.get(it.id), slots = it && SLOTS[it.type];
+        const it = S.imap[cup.at], iv = it && itemViews.get(it.id), slots = iv && iv.slots;
         if (iv && slots) {
           const i = it.buf.indexOf(cup.id), s = slots[Math.min(i, slots.length - 1)];
           parent = iv.inner; v.root.position.set(s[0], TOP, s[1]);
@@ -926,7 +930,6 @@
   // Every ticket is worked out from the game state, so it stays while the problem lasts and comes down when it is fixed.
   const railEl = document.getElementById('rail'), ticketsEl = document.getElementById('tickets');
   const dismissed = new Set(), goalsMet = new Set();
-  let ticketsHtml = '';
   const sumCups = () => beansInShop() + (S.supply.door + S.items.reduce((n, i) => n + (i.built ? i.sacks : 0), 0)) * S.R.supply.sackDoses;
   const unassigned = () => S.items.filter((i) => !i.built && !S.workers.some((w) => !w.leaving && w.builds.includes(i.id)));
   function tutorialStep() {
@@ -995,7 +998,8 @@
     for (const k of Sim.TKEYS) {
       const r = S.research[k];
       if (!r.complete || r.finished <= 0 || S.t - r.finished > 3600 || dismissed.has('res:' + k)) continue;
-      const items = Sim.TOPICS[k].unlocks.filter((t) => CAT[t]);
+      const items = Sim.TOPICS[k].unlocks.filter((t) => CAT[t]), up = Sim.TOPICS[k].raises;
+      if (up) { out.push({ sev: 'good', k: 'Research done', title: Sim.TOPICS[k].name, body: HOLDER[up] + ' now holds ' + S.R.research.topics[k].slots + ' cups.', dismiss: 'res:' + k }); continue; }
       out.push(items.length
         ? { sev: 'good', k: 'Research done', title: Sim.TOPICS[k].name, body: 'You can build ' + items.map((t) => CAT[t].name.toLowerCase()).join(' and ') + ' now.', btn: 'Build it', act: 'tray', arg: trayOf(items[items.length - 1]), dismiss: 'res:' + k }
         : { sev: 'good', k: 'Research done', title: Sim.TOPICS[k].name, body: 'Set up a standing order in Beans.', btn: 'Open Beans', act: 'tray', arg: 'beans', dismiss: 'res:' + k });
@@ -1014,13 +1018,27 @@
     const order = { step: 0, crit: 1, warn: 2, good: 3, info: 4, goal: 5 };
     list.sort((a, b) => order[a.sev] - order[b.sev]);
     const shown = list.slice(0, 4), more = list.length - shown.length;
-    const html = shown.map((t) => '<li class="ticket ' + t.sev + '"><span class="k">' + t.k + '</span><h3>' + t.title + '</h3>' +
+    // keyed: a ticket keeps its element while it stays up, so only new ones drop in and the rest don't replay that
+    // (moving an element restarts its animation, so stale ones go first and survivors stay put)
+    const want = shown.map((t) => [t.k + '|' + t.title, 'ticket ' + t.sev, ticketHtml(t)]);
+    if (more > 0) want.push(['more', 'ticket more', '+' + more + ' more']);
+    const keys = new Set(want.map((w) => w[0])), keep = new Map();
+    for (const li of [...ticketsEl.children]) { if (keys.has(li.dataset.key)) keep.set(li.dataset.key, li); else li.remove(); }
+    want.forEach(([key, cls, html], i) => {
+      let li = keep.get(key);
+      if (!li) { li = document.createElement('li'); li.dataset.key = key; li.style.setProperty('--tilt', TILTS[[...key].reduce((n, c) => n + c.charCodeAt(0), 0) % TILTS.length]); }
+      if (li.className !== cls) li.className = cls;
+      if (li.html !== html) { li.html = html; li.innerHTML = html; }
+      if (ticketsEl.children[i] !== li) ticketsEl.insertBefore(li, ticketsEl.children[i] || null);
+    });
+    railEl.hidden = !shown.length;
+  }
+  const TILTS = ['-1deg', '0.7deg', '-0.3deg', '0.4deg', '-0.6deg'];
+  function ticketHtml(t) {
+    return '<span class="k">' + t.k + '</span><h3>' + t.title + '</h3>' +
       (t.bar != null ? '<div class="tbar"><s style="width:' + Math.round(100 * Math.min(1, t.bar)) + '%"></s></div>' : '') +
       (t.body ? '<p>' + t.body + '</p>' : '') +
-      (t.btn ? '<button type="button" data-tk="' + t.act + '"' + (t.arg != null ? ' data-arg="' + t.arg + '"' : '') + (t.dismiss ? ' data-dismiss="' + t.dismiss + '"' : '') + '>' + t.btn + '</button>' : '') + '</li>').join('') +
-      (more > 0 ? '<li class="ticket more">+' + more + ' more</li>' : '');
-    if (html !== ticketsHtml) { ticketsHtml = html; ticketsEl.innerHTML = html; }
-    railEl.hidden = !shown.length;
+      (t.btn ? '<button type="button" data-tk="' + t.act + '"' + (t.arg != null ? ' data-arg="' + t.arg + '"' : '') + (t.dismiss ? ' data-dismiss="' + t.dismiss + '"' : '') + '>' + t.btn + '</button>' : '');
   }
   function focusItem(id) {
     const it = S.imap[id]; if (!it) return;
@@ -1045,7 +1063,7 @@
     else if (a === 'open') act('open');
     else if (a === 'order') act('order', +arg);
     else if (a === 'research') setResearch(true);
-    ticketsHtml = ''; refreshTickets();
+    refreshTickets();
   });
 
   // ---------- progressive disclosure: tools appear once they are useful, and stay ----------
@@ -1757,8 +1775,20 @@
   }
   resTool.addEventListener('click', () => { fresh.delete('research'); setResearch(resEl.hidden); });
   // what a topic is worth and what it costs, from the current rules
+  // the drawer shows each capacity chain one tier at a time: later tiers wait for the one before, finished ones give way to the next
+  const HOLDER = { till: 'Each till\'s order rail', pickup: 'Each pickup counter' };
+  const shownTopic = (k) => { const T = Sim.TOPICS[k]; return (!T.needs || S.research[T.needs].complete) && !(S.research[k].complete && Sim.TKEYS.some((o) => Sim.TOPICS[o].needs === k)); };
   function topicEffects(k) {
-    const T = Sim.TOPICS[k], items = T.unlocks.filter((t) => CAT[t]);
+    const T = Sim.TOPICS[k];
+    if (T.raises) {
+      const now = Sim.capOf(S, T.raises), to = S.R.research.topics[k].slots;
+      return {
+        unlocks: [HOLDER[T.raises] + ' holds ' + to + ' cups' + (S.research[k].complete ? '' : ', up from ' + now)],
+        gains: [T.raises === 'till' ? 'The till keeps taking orders while a rush of drinks is made' : 'Staff put drinks down and move on while customers are slow to collect'],
+        costs: ['Nothing to buy']
+      };
+    }
+    const items = T.unlocks.filter((t) => CAT[t]);
     const prods = PKEYS.filter((p) => items.includes(PROD[p].machine));
     const unlocks = items.map((t) => CAT[t].name + ' ' + money(CAT[t].cost)).concat(prods.map((p) => PROD[p].name + ' on the menu ' + money(PROD[p].price)));
     if (T.unlocks.includes('auto')) unlocks.push('Automatic bean orders');
@@ -1779,7 +1809,7 @@
     if (key === resKey) return; resKey = key;
     const n = rr.act.length;
     const head = '<header><h2>Research</h2><p class="res-cap">' + R.rate + ' points a minute' + (n > 1 ? ', split ' + n + ' ways' : '') + '. One topic at a time finishes soonest, and nothing pays off until a topic is done.</p><button type="button" id="resClose" aria-label="Close research">Close</button></header>';
-    const cards = Sim.TKEYS.map((k) => {
+    const cards = Sim.TKEYS.filter(shownTopic).map((k) => {
       const T = Sim.TOPICS[k], r = rs[k], work = R.topics[k].work, pct = work ? Math.floor(100 * r.done / work) : 100, fx = topicEffects(k);
       const state = r.complete ? ['done', r.finished > 0 ? 'Done at ' + fmtClock(r.finished) : 'Known from the start'] : r.weight > 0 ? ['active', 'In progress'] : r.done > 0 ? ['paused', 'Paused'] : ['ready', 'Ready to start'];
       const eta = !r.complete && rr.per[k] ? Math.ceil((work - r.done) / rr.per[k]) : null;
