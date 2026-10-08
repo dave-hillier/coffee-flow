@@ -127,12 +127,19 @@ replays play out.
 
 ## Research
 
-- **Topics.** Espresso training unlocks the grinder and espresso machine. Cake supplier unlocks the cake display.
+- **The tree.** Topics sit in six lanes: front counter, bar, menu, beans, customers and team. A topic's `needs`
+  lists the topics that must finish first, so the lanes branch and sometimes join (Latte art needs both House blend
+  and Espresso training).
+- **Unlocks.** Espresso training unlocks the grinder and espresso machine. Cake supplier unlocks the cake display.
   Standing orders unlocks automatic reordering; until it's researched, beans are ordered by hand. Storage needs
   no research.
-- **Capacity tiers.** Tills and pickup counters start with 4 cup slots. Order rail (`rail1`–`rail3`) and pickup
-  counter (`counter1`–`counter3`) topics raise every till or pickup counter to 8, 12 and then 16 slots. Each tier
-  needs the one before it, and the research drawer shows only the next tier in each chain.
+- **Rule changes.** Every other topic changes rule values when it finishes: cup slots on tills and pickup counters
+  (8, 12, then 16), order and collection times, make and grind times, hopper and knock box sizes, prices and
+  ingredient costs, bean lead time and price, patience, demand growth and ceiling, build times, walking speed and
+  the staff limit. Equipment and staff already in the shop pick the change up at once.
+- **Plans.** The action `plan topic` queues everything the topic still needs, in order, then the topic itself;
+  each step starts when the one before finishes. Choosing a topic by hand drops the plan, and `plan` with no
+  topic clears it.
 - **Shared capacity.** `research.rate` units per game minute are split across the topics in progress by weight,
   set with the action `research topic 0..3`.
 - **Even split.** Three topics in progress each go at a third of the pace, and nothing is lost by splitting.
@@ -140,8 +147,8 @@ replays play out.
   no later. That is the design doc's cost of delay. `research.switchPct` can add an optional context-switching
   loss per extra topic; it is 0 by default.
 - **Rules.** `research.topics.<name>.work` sets each topic's size, and `0` means the topic is known from the start.
-  Capacity tiers also take `research.topics.<name>.slots`.
-  `research.enabled=0` unlocks everything.
+  Topics that change rules also take `research.topics.<name>.to` (the new value) or `.pct` (a change in percent,
+  compounding across tiers). `research.enabled=0` makes every topic known from the start.
 - **Bots.** `researchSerial` (one topic at a time or all at once) and `standingFirst` are policy genes. Steady
   focuses; Rush researches everything at once.
 

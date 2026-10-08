@@ -5,7 +5,7 @@
 (function (root) {
   'use strict';
   const GW = 12, GH = 12, IN = 10;          // grid; interior rows z 0..9, z 10 = front wall (gap at x 4,5), z 11 = street
-  const VERSION = 8;                         // bump whenever a change makes old replays play out differently
+  const VERSION = 9;                         // bump whenever a change makes old replays play out differently
   const TPM = 60;
   const NAMES = ['Pip', 'Bo', 'Mo', 'Jun', 'Ada', 'Kit', 'Rue', 'Fen', 'Ola', 'Tam'];
   const STREET = { x: 5, z: 11 };
@@ -28,19 +28,39 @@
     cake:     { name: 'Cake',          machine: 'pastry' }
   };
   const PKEYS = ['filter', 'espresso', 'cake'];
-  // Research: what each topic unlocks. Work and capacity are rules.
+  // Research: a tree of topics in lanes. A topic either unlocks things to buy, or sets rule values once finished
+  // (the paths in `sets`, to the topic's `to` rule, or by its `pct` rule). `needs` lists the topics that come first.
+  // Work, `to` and `pct` are rules.
   const TOPICS = {
-    espresso: { name: 'Espresso training', unlocks: ['grinder', 'espresso'], blurb: 'Lets you buy a grinder and espresso machine.' },
-    cake:     { name: 'Cake supplier',     unlocks: ['pastry'],              blurb: 'Lets you buy a cake display.' },
-    standing: { name: 'Standing orders',   unlocks: ['auto'],                blurb: 'Lets the supplier deliver automatically when beans run low.' },
-    // capacity tiers: each raises one item's slots to the topic's `slots` rule, and needs the tier before it
-    rail1:    { name: 'Order rail: 8 cups',      unlocks: [], raises: 'till',   blurb: 'Each till\'s rail holds 8 waiting orders.' },
-    rail2:    { name: 'Order rail: 12 cups',     unlocks: [], raises: 'till',   needs: 'rail1', blurb: 'Each till\'s rail holds 12 waiting orders.' },
-    rail3:    { name: 'Order rail: 16 cups',     unlocks: [], raises: 'till',   needs: 'rail2', blurb: 'Each till\'s rail holds 16 waiting orders.' },
-    counter1: { name: 'Pickup counter: 8 cups',  unlocks: [], raises: 'pickup', blurb: 'Each pickup counter holds 8 finished drinks.' },
-    counter2: { name: 'Pickup counter: 12 cups', unlocks: [], raises: 'pickup', needs: 'counter1', blurb: 'Each pickup counter holds 12 finished drinks.' },
-    counter3: { name: 'Pickup counter: 16 cups', unlocks: [], raises: 'pickup', needs: 'counter2', blurb: 'Each pickup counter holds 16 finished drinks.' }
+    rail1:     { lane: 'counter', name: 'Order rail: 8 cups',   sets: ['items.till.slots'], blurb: 'Each till\'s rail holds 8 waiting orders, so the till keeps taking orders through a rush.' },
+    rail2:     { lane: 'counter', name: 'Order rail: 12 cups',  sets: ['items.till.slots'], needs: ['rail1'], blurb: 'Each till\'s rail holds 12 waiting orders.' },
+    rail3:     { lane: 'counter', name: 'Order rail: 16 cups',  sets: ['items.till.slots'], needs: ['rail2'], blurb: 'Each till\'s rail holds 16 waiting orders.' },
+    cards:     { lane: 'counter', name: 'Card readers',         sets: ['orderTime'], needs: ['rail1'], blurb: 'Paying by card is quicker, so each order takes less time at the till.' },
+    counter1:  { lane: 'counter', name: 'Pickup counter: 8 cups',  sets: ['items.pickup.slots'], blurb: 'Each pickup counter holds 8 finished drinks, so staff put drinks down and move on.' },
+    counter2:  { lane: 'counter', name: 'Pickup counter: 12 cups', sets: ['items.pickup.slots'], needs: ['counter1'], blurb: 'Each pickup counter holds 12 finished drinks.' },
+    counter3:  { lane: 'counter', name: 'Pickup counter: 16 cups', sets: ['items.pickup.slots'], needs: ['counter2'], blurb: 'Each pickup counter holds 16 finished drinks.' },
+    names:     { lane: 'counter', name: 'Names on cups',        sets: ['collectTime'], needs: ['counter1'], blurb: 'Customers spot their drink at once and leave the counter sooner.' },
+    espresso:  { lane: 'bar', name: 'Espresso training',     unlocks: ['grinder', 'espresso'], blurb: 'Lets you buy a grinder and espresso machine.' },
+    burrs:     { lane: 'bar', name: 'Sharper burrs',         sets: ['products.espresso.grind'], needs: ['espresso'], blurb: 'Grinders get through a dose in half the time.' },
+    barista1:  { lane: 'bar', name: 'Barista course',        sets: ['products.filter.make', 'products.espresso.make', 'products.cake.make'], needs: ['espresso'], blurb: 'Staff make every drink and plate faster.' },
+    barista2:  { lane: 'bar', name: 'Bar workflow',          sets: ['products.filter.make', 'products.espresso.make', 'products.cake.make'], needs: ['barista1'], blurb: 'A tidier bar: everything is made faster again.' },
+    hoppers:   { lane: 'bar', name: 'Bigger hoppers',        sets: ['items.brewer.hopper', 'items.grinder.hopper'], blurb: 'Brewers and grinders hold twice the beans, so refills come half as often.' },
+    knock:     { lane: 'bar', name: 'Deeper knock boxes',    sets: ['items.brewer.knock', 'items.espresso.knock'], needs: ['hoppers'], blurb: 'Knock boxes hold twice the grounds, so they need emptying half as often.' },
+    blend:     { lane: 'menu', name: 'House blend',          sets: ['products.filter.price'], blurb: 'A blend of your own: filter coffee sells for more.' },
+    latte:     { lane: 'menu', name: 'Latte art',            sets: ['products.espresso.price'], needs: ['blend', 'espresso'], blurb: 'Espresso drinks sell for more.' },
+    cake:      { lane: 'menu', name: 'Cake supplier',        unlocks: ['pastry'], blurb: 'Lets you buy a cake display.' },
+    bake:      { lane: 'menu', name: 'Bake in-house',        sets: ['products.cake.cost'], needs: ['cake'], blurb: 'Cake costs less to make.' },
+    standing:  { lane: 'beans', name: 'Standing orders',     unlocks: ['auto'], blurb: 'Lets the supplier deliver automatically when beans run low.' },
+    roaster:   { lane: 'beans', name: 'Local roaster',       sets: ['supply.leadMins'], blurb: 'A roaster round the corner: deliveries arrive sooner.' },
+    wholesale: { lane: 'beans', name: 'Wholesale account',   sets: ['supply.sackCost'], needs: ['roaster'], blurb: 'Sacks of beans cost less.' },
+    music:     { lane: 'guests', name: 'Queue music',        sets: ['patience.min'], blurb: 'Customers wait longer before they give up.' },
+    loyalty:   { lane: 'guests', name: 'Loyalty cards',      sets: ['demand.gain'], needs: ['music'], blurb: 'Happy customers bring trade back faster.' },
+    press:     { lane: 'guests', name: 'Local press',        sets: ['demand.max'], needs: ['loyalty'], blurb: 'A write-up in the paper: the shop can grow busier than before.' },
+    fitout:    { lane: 'team', name: 'Flat-pack fit-out',    sets: ['items.till.buildMins', 'items.pickup.buildMins', 'items.brewer.buildMins', 'items.grinder.buildMins', 'items.espresso.buildMins', 'items.pastry.buildMins', 'items.store.buildMins'], blurb: 'New equipment goes up faster.' },
+    shoes:     { lane: 'team', name: 'Comfy shoes',          sets: ['walkStep'], blurb: 'Staff walk faster.' },
+    rota:      { lane: 'team', name: 'Rota planning',        sets: ['maxWorkers'], needs: ['shoes'], blurb: 'Room on the rota for more staff.' }
   };
+  const prereqs = (k) => TOPICS[k].needs || [];
   const TKEYS = Object.keys(TOPICS);
   // Standard layout: where starting equipment goes and where the bots build. [x, z, rotation] per copy.
   const LAYOUT = {
@@ -65,9 +85,16 @@
     // Research: capacity in units per game minute, split evenly (by weight) across the topics in progress, so three topics
     // each go at a third of the pace. Nothing pays off until a topic is finished: that is the whole cost of splitting.
     // switchPct (optional, 0 by default) adds a context-switching loss per extra topic. work 0 = known from the start.
-    research: { enabled: 1, rate: 10, switchPct: 0, topics: { espresso: { work: 600 }, cake: { work: 300 }, standing: { work: 250 },
-      rail1: { work: 150, slots: 8 }, rail2: { work: 300, slots: 12 }, rail3: { work: 500, slots: 16 },
-      counter1: { work: 150, slots: 8 }, counter2: { work: 300, slots: 12 }, counter3: { work: 500, slots: 16 } } },
+    // Each topic: work to finish it, then `to` (the new value) or `pct` (change in percent, rounded to whole units).
+    research: { enabled: 1, rate: 10, switchPct: 0, topics: {
+      rail1: { work: 150, to: 8 }, rail2: { work: 300, to: 12 }, rail3: { work: 500, to: 16 }, cards: { work: 250, to: 50 },
+      counter1: { work: 150, to: 8 }, counter2: { work: 300, to: 12 }, counter3: { work: 500, to: 16 }, names: { work: 200, to: 8 },
+      espresso: { work: 600 }, burrs: { work: 300, pct: -50 }, barista1: { work: 400, pct: -15 }, barista2: { work: 700, pct: -15 },
+      hoppers: { work: 200, pct: 100 }, knock: { work: 250, pct: 100 },
+      blend: { work: 300, to: 290 }, latte: { work: 450, to: 370 }, cake: { work: 300 }, bake: { work: 350, to: 70 },
+      standing: { work: 250 }, roaster: { work: 300, to: 10 }, wholesale: { work: 450, to: 450 },
+      music: { work: 250, to: 1700 }, loyalty: { work: 400, to: 0.025 }, press: { work: 600, to: 2.6 },
+      fitout: { work: 250, pct: -40 }, shoes: { work: 300, to: 8 }, rota: { work: 350, to: 7 } } },
     // Worker chores: tipping a sack into a hopper, emptying a knock box, dumping grounds at the door.
     chores: { refill: 15, empty: 20, dump: 10 },
     wagePerMin: 15,           // per worker per game minute (£9/h)
@@ -109,10 +136,22 @@
       if (typeof o[leaf] !== typeof over[k]) throw new Error('Rule ' + k + ' must be a ' + typeof o[leaf]);
       o[leaf] = over[k];
     }
-    // merged views the game reads: shape + numbers
-    R.CAT = {}; for (const t in SHAPE) { const n = R.items[t]; R.CAT[t] = Object.assign({}, SHAPE[t], { cost: n.cost, mins: n.buildMins, cap: n.slots || 0 }); }
-    R.PROD = {}; for (const p in PSHAPE) R.PROD[p] = Object.assign({}, PSHAPE[p], R.products[p]);
+    R.CAT = {}; R.PROD = {};
+    return derive(R);
+  }
+  // merged views the game reads: shape + numbers, refreshed in place so anything holding them sees research changes
+  function derive(R) {
+    for (const t in SHAPE) { const n = R.items[t]; R.CAT[t] = Object.assign(R.CAT[t] || {}, SHAPE[t], { cost: n.cost, mins: n.buildMins, cap: n.slots || 0 }); }
+    for (const p in PSHAPE) R.PROD[p] = Object.assign(R.PROD[p] || {}, PSHAPE[p], R.products[p]);
     return R;
+  }
+  // what a topic changes: [{ path, from, to }] against the given rules
+  function topicChanges(R, k) {
+    const T = TOPICS[k], n = R.research.topics[k];
+    return (T.sets || []).map((path) => {
+      const keys = path.split('.'), leaf = keys.pop(), o = keys.reduce((o, key) => o[key], R), from = o[leaf];
+      return { path, from, to: n.pct != null ? Math.round(from * (100 + n.pct) / 100) : n.to };
+    });
   }
   function flatRules(o, pre, out) {
     out = out || {};
@@ -342,7 +381,7 @@
       items: [], workers: [], customers: [], cups: [], imap: {}, wmap: {}, cmap: {}, upmap: {}, counts: {},
       menuOff: {}, log: [], pending: log ? log.map((a) => a.slice()) : [], events: [], served: [],
       supply: { door: R.start.sacks, onOrder: 0, orders: [], auto: { point: 0, qty: 0 }, grindPending: 0 },
-      research: Object.fromEntries(TKEYS.map((k) => [k, { done: 0, weight: 0, complete: !R.research.enabled || R.research.topics[k].work <= 0, started: -1, finished: R.research.topics[k].work <= 0 ? 0 : -1 }])),
+      resPlan: [], research: Object.fromEntries(TKEYS.map((k) => [k, { done: 0, weight: 0, complete: !R.research.enabled || R.research.topics[k].work <= 0, started: -1, finished: R.research.topics[k].work <= 0 ? 0 : -1 }])),
       // cumulative exits from each stage of the order value chain; a lost order counts as leaving every later stage too
       flow: { arrived: 0, ordered: 0, claimed: 0, made: 0, served: 0, lostQueue: 0, lostRail: 0, lostMaking: 0, lostReady: 0 },
       acts: {}, marks: [],
@@ -353,6 +392,7 @@
     };
     S.r = rng(S.seed);
     rebuild(S);
+    for (const k of TKEYS) if (S.research[k].complete) applyTopic(S, k);   // known from the start
     // starting setup
     const st = R.start;
     for (const type of Object.keys(LAYOUT)) {
@@ -883,8 +923,19 @@
       const k = a[2], r = S.research[k];
       if (!r) return 'Unknown research';
       if (r.complete) return 'Already researched';
-      const pre = TOPICS[k].needs; if (pre && !S.research[pre].complete && (a[3] | 0) > 0) return 'Needs research: ' + TOPICS[pre].name;
+      const pre = prereqs(k).find((p) => !S.research[p].complete); if (pre && (a[3] | 0) > 0) return 'Needs research: ' + TOPICS[pre].name;
       r.weight = Math.max(0, Math.min(3, a[3] | 0));
+      S.resPlan = [];   // choosing by hand drops any plan
+      return null;
+    }
+    // plan a topic: research everything it needs, in turn, then the topic itself. No topic clears the plan.
+    if (op === 'plan') {
+      const k = a[2];
+      if (!k) { S.resPlan = []; return null; }
+      if (!S.research[k]) return 'Unknown research';
+      if (S.research[k].complete) return 'Already researched';
+      S.resPlan = routeTo(S, k);
+      for (const o of TKEYS) if (!S.research[o].complete) S.research[o].weight = o === S.resPlan[0] ? 1 : 0;
       return null;
     }
     if (op === 'auto') {
@@ -949,14 +1000,24 @@
   // ---------- research ----------
   function needsResearch(S, thing) {
     if (!S.R.research.enabled) return null;
-    for (const k of TKEYS) if (TOPICS[k].unlocks.includes(thing) && !S.research[k].complete) return k;
+    for (const k of TKEYS) if ((TOPICS[k].unlocks || []).includes(thing) && !S.research[k].complete) return k;
     return null;
   }
-  // slots for an item type: the base rule, raised by any finished capacity topic
-  function capOf(S, type) {
-    let n = S.R.CAT[type].cap || 0;
-    for (const k of TKEYS) if (TOPICS[k].raises === type && S.research[k].complete) n = Math.max(n, S.R.research.topics[k].slots);
-    return n;
+  // slots for an item type, as research has left them
+  const capOf = (S, type) => S.R.CAT[type].cap || 0;
+  // the topics still to research before k, in an order that works, ending with k itself
+  function routeTo(S, k, out) {
+    out = out || [];
+    if (S.research[k].complete || out.includes(k)) return out;
+    for (const p of prereqs(k)) routeTo(S, p, out);
+    out.push(k); return out;
+  }
+  // a finished topic: set its rules, then bring existing equipment and staff up to date
+  function applyTopic(S, k) {
+    for (const c of topicChanges(S.R, k)) { const keys = c.path.split('.'), leaf = keys.pop(); keys.reduce((o, key) => o[key], S.R)[leaf] = c.to; }
+    derive(S.R);
+    for (const it of S.items) it.cap = capOf(S, it.type);
+    for (const w of S.workers) w.spd = S.R.walkStep;
   }
   function researchStep(S) {
     const rs = S.research, active = TKEYS.filter((k) => !rs[k].complete && rs[k].weight > 0);
@@ -975,9 +1036,15 @@
         r.complete = true; r.weight = 0; r.finished = S.t;
         ev(S, 'Research complete: ' + TOPICS[k].name + '. ' + TOPICS[k].blurb, 'good');
         mark(S, 'research', TOPICS[k].name);
-        const t = TOPICS[k].raises; if (t) for (const it of S.items) if (it.type === t) it.cap = capOf(S, t);
+        applyTopic(S, k);
       }
     });
+    // a plan carries on to the next topic on its route once nothing else is running
+    if (S.resPlan.length) {
+      S.resPlan = S.resPlan.filter((k) => !rs[k].complete);
+      const next = S.resPlan[0];
+      if (next && !TKEYS.some((k) => !rs[k].complete && rs[k].weight > 0)) rs[next].weight = 1;
+    }
   }
 
   // ---------- history: one sample per game minute, kept for 24 hours ----------
@@ -1016,5 +1083,5 @@
   }
 
   root.CoffeeSim = { VERSION, create, step, act, canPlace, whyNotRemove, whyNotOpen, offered, unlocked, rate, label, dimsOf, footprint,
-    wcell, ccell, encode, decode, hash, rulesWith, flatRules, DEFAULT_RULES, SHAPE, LAYOUT, DOOR, TOPICS, TKEYS, needsResearch, capOf, activityOf, CAT, PROD, PKEYS, GW, GH, IN, TPM };
+    wcell, ccell, encode, decode, hash, rulesWith, flatRules, DEFAULT_RULES, topicChanges, routeTo, prereqs, SHAPE, LAYOUT, DOOR, TOPICS, TKEYS, needsResearch, capOf, activityOf, CAT, PROD, PKEYS, GW, GH, IN, TPM };
 })(typeof window !== 'undefined' ? window : globalThis);

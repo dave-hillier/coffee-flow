@@ -529,6 +529,9 @@
     ICONS.stock = shoot(withSacks(modelFor('stock'), 6));
     ICONS.store = shoot(withSacks(modelFor('store'), 7));
     ICONS.cup = shoot(makeCup('filter'));
+    ICONS.espressoCup = shoot(makeCup('espresso'));
+    ICONS.cake = shoot(makeCup('cake'));
+    ICONS.customer = shoot(custRig({ look: 2, id: 1 }).root, 0.46);
     const sack = new THREE.Group(); sack.add(sackMesh()); const s2 = sackMesh(); s2.position.set(0.12, 0, 0.3); s2.rotation.y = 0.5; sack.add(s2); ICONS.sack = shoot(sack);
     ICONS.worker = shoot(workerRig().root, 0.46);
     const books = new THREE.Group();
@@ -551,7 +554,7 @@
   function newGame(seed, log, rules) {
     clearViews();
     S = Sim.create(seed, log, rules); CAT = S.R.CAT; PROD = S.R.PROD;
-    sel = null; hover = null; placing = null; armed = null; seenEvent = 0; ticker.length = 0; buildMode = false; tray = null; accessKey = ''; revealed.clear(); fresh.clear(); freshItems.clear(); seenDone.clear(); dismissed.clear(); goalsMet.clear(); ticketsEl.textContent = ''; dockKey = ''; suppliesKey = ''; pileN = -1; flowKey = ''; resKey = ''; if (typeof closeCtx === 'function') closeCtx();
+    sel = null; hover = null; placing = null; armed = null; seenEvent = 0; ticker.length = 0; buildMode = false; tray = null; accessKey = ''; revealed.clear(); fresh.clear(); freshItems.clear(); seenDone.clear(); dismissed.clear(); goalsMet.clear(); ticketsEl.textContent = ''; dockKey = ''; suppliesKey = ''; pileN = -1; flowKey = ''; resStruct = ''; resSel = null; if (typeof closeCtx === 'function') closeCtx();
     watching = !!(log && log.length); bot = null;
     document.getElementById('scenario').textContent = 'Scenario 1 · seed ' + seed + (Object.keys(S.over).length ? ' · custom rules' : '');
     document.getElementById('scenario').title = Object.entries(S.over).map(([k, v]) => k + ' = ' + v).join('\n');
@@ -998,8 +1001,8 @@
     for (const k of Sim.TKEYS) {
       const r = S.research[k];
       if (!r.complete || r.finished <= 0 || S.t - r.finished > 3600 || dismissed.has('res:' + k)) continue;
-      const items = Sim.TOPICS[k].unlocks.filter((t) => CAT[t]), up = Sim.TOPICS[k].raises;
-      if (up) { out.push({ sev: 'good', k: 'Research done', title: Sim.TOPICS[k].name, body: HOLDER[up] + ' now holds ' + S.R.research.topics[k].slots + ' cups.', dismiss: 'res:' + k }); continue; }
+      const items = (Sim.TOPICS[k].unlocks || []).filter((t) => CAT[t]);
+      if (Sim.TOPICS[k].sets) { out.push({ sev: 'good', k: 'Research done', title: Sim.TOPICS[k].name, body: Sim.TOPICS[k].blurb, dismiss: 'res:' + k }); continue; }
       out.push(items.length
         ? { sev: 'good', k: 'Research done', title: Sim.TOPICS[k].name, body: 'You can build ' + items.map((t) => CAT[t].name.toLowerCase()).join(' and ') + ' now.', btn: 'Build it', act: 'tray', arg: trayOf(items[items.length - 1]), dismiss: 'res:' + k }
         : { sev: 'good', k: 'Research done', title: Sim.TOPICS[k].name, body: 'Set up a standing order in Beans.', btn: 'Open Beans', act: 'tray', arg: 'beans', dismiss: 'res:' + k });
@@ -1744,11 +1747,10 @@
   // Research: one shared capacity, split across topics; every extra topic in progress costs capacity
   // =====================================================================
   const resEl = document.getElementById('research'), resTool = document.getElementById('resTool');
-  let resKey = '';
   function setResearch(on) {
     if (on) closeOverlays('research');
-    resEl.hidden = !on; resTool.setAttribute('aria-expanded', String(on)); stage.classList.toggle('flow-open', on || !flowEl.hidden);
-    if (on) { resKey = ''; refreshResearch(); }
+    resEl.hidden = !on; resTool.setAttribute('aria-expanded', String(on)); stage.classList.toggle('flow-open', on || !flowEl.hidden); stage.classList.toggle('res-open', on);
+    if (on) { resStruct = ''; refreshResearch(); }
   }
   function researchRates() {
     const R = S.R.research, act = Sim.TKEYS.filter((k) => !S.research[k].complete && S.research[k].weight > 0);
@@ -1774,24 +1776,81 @@
     resTool.classList.toggle('idle', cls === 'idle'); resTool.classList.toggle('done', cls === 'done');
   }
   resTool.addEventListener('click', () => { fresh.delete('research'); setResearch(resEl.hidden); });
+  // ---------- the tree: lanes as rows, tiers as columns, chains side by side within a lane ----------
+  // where each topic sits: [row within its lane, segment, icon]. Columns come from how deep a topic is in the tree,
+  // so hiding finished topics slides the rest to the left.
+  const LANES = [['counter', 'Front counter'], ['bar', 'Bar'], ['menu', 'Menu'], ['beans', 'Beans'], ['guests', 'Customers'], ['team', 'Team']];
+  const TREE = {
+    rail1: [0, 0, 'till'], rail2: [0, 0, 'till'], rail3: [0, 0, 'till'], cards: [1, 0, 'till'],
+    counter1: [0, 1, 'pickup'], counter2: [0, 1, 'pickup'], counter3: [0, 1, 'pickup'], names: [1, 1, 'cup'],
+    espresso: [0, 0, 'espresso'], burrs: [0, 0, 'grinder'], barista1: [1, 0, 'espressoCup'], barista2: [1, 0, 'worker'],
+    hoppers: [0, 1, 'grinder'], knock: [0, 1, 'brewer'],
+    blend: [0, 0, 'cup'], latte: [0, 0, 'espressoCup'], cake: [0, 1, 'pastry'], bake: [0, 1, 'cake'],
+    standing: [0, 0, 'sack'], roaster: [0, 1, 'sack'], wholesale: [0, 1, 'store'],
+    music: [0, 0, 'customer'], loyalty: [0, 0, 'customer'], press: [0, 0, 'research'],
+    shoes: [0, 0, 'worker'], rota: [0, 0, 'worker'], fitout: [0, 1, 'stock']
+  };
+  // how a rule change reads: what it is, and how to show a value
+  const secs = (v) => v + 's', mins = (v) => v + ' min';
+  const STAT = {
+    'items.till.slots': ['Order rail', (v) => v + ' cups'], 'items.pickup.slots': ['Pickup counter', (v) => v + ' cups'],
+    orderTime: ['Taking an order', secs], collectTime: ['Collecting a drink', secs],
+    'products.espresso.grind': ['Grinding a dose', secs],
+    'products.filter.make': ['Pouring a filter', secs], 'products.espresso.make': ['Pulling an espresso', secs], 'products.cake.make': ['Plating cake', secs],
+    'items.brewer.hopper': ['Brewer hopper', (v) => v + ' doses'], 'items.grinder.hopper': ['Grinder hopper', (v) => v + ' doses'],
+    'items.brewer.knock': ['Brewer knock box', (v) => v + ' drinks'], 'items.espresso.knock': ['Espresso knock box', (v) => v + ' drinks'],
+    'products.filter.price': ['Filter coffee', money], 'products.espresso.price': ['Espresso', money], 'products.cake.cost': ['Cake ingredients', money],
+    'supply.leadMins': ['Bean delivery', mins], 'supply.sackCost': ['Sack of beans', money],
+    'patience.min': ['Shortest wait before leaving', (v) => Math.round(v / 60) + ' min'],
+    'demand.gain': ['Trade growth', (v) => (v * 100).toFixed(1) + '%'], 'demand.max': ['Busiest trade', (v) => '×' + v],
+    walkStep: ['Staff step', secs], maxWorkers: ['Staff limit', (v) => v + ' people']
+  };
+  let hideDone = false, resSel = null, resStruct = '';
+  try { hideDone = localStorage.getItem('coffeeflow.hideDone') === '1'; } catch (e) { /* storage unavailable */ }
+  const tstate = (k) => {
+    const r = S.research[k];
+    if (r.complete) return 'done';
+    if (r.weight > 0) return 'active';
+    if (Sim.prereqs(k).some((p) => !S.research[p].complete)) return 'locked';
+    return r.done > 0 ? 'paused' : 'ready';
+  };
+  const STATE_TEXT = { done: 'Done', active: 'In progress', paused: 'Paused', ready: 'Ready to start', locked: 'Needs research first' };
+  // grid cells for every shown topic, and the lane rows that hold anything
+  function treeLayout() {
+    const shown = Sim.TKEYS.filter((k) => !(hideDone && S.research[k].complete));
+    const depth = {};
+    const d = (k) => depth[k] || (depth[k] = 1 + Math.max(0, ...Sim.prereqs(k).filter((p) => shown.includes(p)).map(d)));
+    const segW = [0, 0]; shown.forEach((k) => { segW[TREE[k][1]] = Math.max(segW[TREE[k][1]], d(k)); });
+    // columns: lane names, the first set of chains, a narrow gap, the second set
+    const template = 'var(--lane-w)' + (segW[0] ? ' repeat(' + segW[0] + ', var(--col-w))' : '') + (segW[0] && segW[1] ? ' 20px' : '') + (segW[1] ? ' repeat(' + segW[1] + ', var(--col-w))' : '');
+    const rows = []; let gridRow = 1;
+    const cell = {};
+    LANES.forEach(([lane, label]) => {
+      const mine = shown.filter((k) => Sim.TOPICS[k].lane === lane);
+      if (!mine.length) return;
+      const used = [...new Set(mine.map((k) => TREE[k][0]))].sort();
+      rows.push({ lane, label, row: gridRow, span: used.length });
+      mine.forEach((k) => { cell[k] = { row: gridRow + used.indexOf(TREE[k][0]), col: (TREE[k][1] && segW[0] ? segW[0] + 1 : 0) + d(k) }; });
+      gridRow += used.length;
+    });
+    return { shown, cell, rows, template };
+  }
+  function topicIcon(k) { return ICONS[TREE[k][2]] || ICONS.research || ''; }
   // what a topic is worth and what it costs, from the current rules
-  // the drawer shows each capacity chain one tier at a time: later tiers wait for the one before, finished ones give way to the next
-  const HOLDER = { till: 'Each till\'s order rail', pickup: 'Each pickup counter' };
-  const shownTopic = (k) => { const T = Sim.TOPICS[k]; return (!T.needs || S.research[T.needs].complete) && !(S.research[k].complete && Sim.TKEYS.some((o) => Sim.TOPICS[o].needs === k)); };
   function topicEffects(k) {
     const T = Sim.TOPICS[k];
-    if (T.raises) {
-      const now = Sim.capOf(S, T.raises), to = S.R.research.topics[k].slots;
-      return {
-        unlocks: [HOLDER[T.raises] + ' holds ' + to + ' cups' + (S.research[k].complete ? '' : ', up from ' + now)],
-        gains: [T.raises === 'till' ? 'The till keeps taking orders while a rush of drinks is made' : 'Staff put drinks down and move on while customers are slow to collect'],
-        costs: ['Nothing to buy']
-      };
+    if (T.sets) {
+      const ch = Sim.topicChanges(S.R, k), done = S.research[k].complete;
+      // a percentage across many machines reads better as one line
+      const pct = S.R.research.topics[k].pct;
+      const lines = ch.length > 3 ? [{ label: 'Build times', text: Math.abs(pct) + '% shorter' }]
+        : ch.map((c) => ({ label: STAT[c.path][0], from: done ? null : STAT[c.path][1](c.from), to: STAT[c.path][1](done ? c.from : c.to) }));
+      return { changes: lines, unlocks: [], gains: [], costs: [] };
     }
-    const items = T.unlocks.filter((t) => CAT[t]);
+    const items = (T.unlocks || []).filter((t) => CAT[t]);
     const prods = PKEYS.filter((p) => items.includes(PROD[p].machine));
     const unlocks = items.map((t) => CAT[t].name + ' ' + money(CAT[t].cost)).concat(prods.map((p) => PROD[p].name + ' on the menu ' + money(PROD[p].price)));
-    if (T.unlocks.includes('auto')) unlocks.push('Automatic bean orders');
+    if ((T.unlocks || []).includes('auto')) unlocks.push('Automatic bean orders');
     const gains = [], costs = [];
     prods.forEach((p) => {
       gains.push(S.R.mix[p] + '% of customers want ' + PROD[p].name.toLowerCase() + ' first');
@@ -1799,39 +1858,120 @@
     });
     if (prods.length) gains.push(Math.round(S.R.demand.menuBonus * 100) + '% more customers for each extra item on the menu');
     if (items.length) costs.push(money(items.reduce((n, t) => n + CAT[t].cost, 0)) + ' of equipment to buy');
-    if (T.unlocks.includes('auto')) { gains.push('Beans reorder themselves before you run dry'); costs.push('Buys sacks even when cash is tight'); }
-    return { unlocks, gains, costs };
+    if ((T.unlocks || []).includes('auto')) { gains.push('Beans reorder themselves before you run dry'); costs.push('Buys sacks even when cash is tight'); }
+    return { changes: [], unlocks, gains, costs };
+  }
+  const minsLeft = (k, rr) => { const r = S.research[k], work = S.R.research.topics[k].work; return Math.ceil((work - r.done) / (rr.per[k] || S.R.research.rate)); };
+  // the detail pane: the selected topic, what it changes, what it needs and what to do about it
+  function topicPane(k, rr) {
+    const T = Sim.TOPICS[k], r = S.research[k], st = tstate(k), work = S.R.research.topics[k].work, fx = topicEffects(k);
+    const pct = work ? Math.floor(100 * r.done / work) : 100, n = rr.act.length, plan = S.resPlan;
+    const route = st === 'locked' ? Sim.routeTo(S, k) : [];
+    const routeMins = route.reduce((m, o) => m + Math.ceil((S.R.research.topics[o].work - S.research[o].done) / S.R.research.rate), 0);
+    let status = STATE_TEXT[st];
+    if (st === 'done') status = r.finished > 0 ? 'Done at ' + fmtClock(r.finished) : 'Known from the start';
+    else if (st === 'active') status = 'In progress, ' + minsLeft(k, rr) + ' min left';
+    else if (st !== 'locked') status = (r.done ? pct + '% done, ' : '') + minsLeft(k, rr) + ' min at full pace';
+    const planned = plan.length && plan[plan.length - 1] === k;
+    const ctl = st === 'done' ? ''
+      : st === 'active' ? '<button type="button" data-res="' + k + '" data-w="0">Pause</button>'
+      : st === 'locked' ? (planned ? '<button type="button" data-plan="">Cancel plan</button>'
+        : '<button type="button" class="primary" data-plan="' + k + '">Plan route: ' + route.length + ' topics</button>')
+      : n ? '<button type="button" class="primary" data-focus="' + k + '">Do this next</button><button type="button" class="link" data-res="' + k + '" data-w="1">Run alongside</button>'
+      : '<button type="button" class="primary" data-res="' + k + '" data-w="1">' + (r.done ? 'Resume' : 'Start') + '</button>';
+    const needs = Sim.prereqs(k);
+    return '<div class="tp-head"><img alt="" src="' + topicIcon(k) + '"><div><h3 id="tpName">' + esc(T.name) + '</h3><p class="tp-state ' + st + '" id="tpState">' + esc(status) + '</p></div></div>' +
+      (st === 'done' || st === 'locked' ? '' : '<div class="progress"><s id="tpProg" style="width:' + pct + '%"></s></div>') +
+      '<p class="tp-blurb">' + esc(T.blurb) + '</p>' +
+      (fx.changes.length ? '<dl class="tp-changes">' + fx.changes.map((c) => '<div><dt>' + esc(c.label) + '</dt><dd>' + (c.text ? esc(c.text) : (c.from ? '<del>' + esc(c.from) + '</del> ' : '') + '<ins>' + esc(c.to) + '</ins>') + '</dd></div>').join('') + '</dl>' : '') +
+      (fx.unlocks.length ? '<ul class="unlocks" aria-label="Unlocks">' + fx.unlocks.map((u) => '<li>' + esc(u) + '</li>').join('') + '</ul>' : '') +
+      (st !== 'done' && (fx.gains.length || fx.costs.length) ? '<ul class="fx">' + fx.gains.map((g) => '<li>' + esc(g) + '</li>').join('') + fx.costs.map((c) => '<li class="cost">' + esc(c) + '</li>').join('') + '</ul>' : '') +
+      (needs.length ? '<p class="tp-needs">Needs ' + needs.map((p) => hideDone && S.research[p].complete ? '<span class="chip met">' + esc(Sim.TOPICS[p].name) + '</span>' : '<button type="button" class="chip ' + (S.research[p].complete ? 'met' : '') + '" data-k="' + p + '">' + esc(Sim.TOPICS[p].name) + '</button>').join(' ') + '</p>' : '') +
+      (st === 'locked' && !planned ? '<p class="tp-route">Planning researches ' + route.slice(0, -1).map((o) => esc(Sim.TOPICS[o].name)).join(', then ') + ', then this: about ' + routeMins + ' min at full pace.</p>' : '') +
+      (planned ? '<p class="tp-route">Planned. Each step starts when the one before it finishes.</p>' : '') +
+      (ctl ? '<div class="res-ctl">' + ctl + '</div>' : '');
   }
   function refreshResearch() {
     if (resEl.hidden) return;
-    const rs = S.research, R = S.R.research, rr = researchRates();
-    const key = Sim.TKEYS.map((k) => rs[k].done + ':' + rs[k].weight + ':' + rs[k].complete).join('|');
-    if (key === resKey) return; resKey = key;
-    const n = rr.act.length;
-    const head = '<header><h2>Research</h2><p class="res-cap">' + R.rate + ' points a minute' + (n > 1 ? ', split ' + n + ' ways' : '') + '. One topic at a time finishes soonest, and nothing pays off until a topic is done.</p><button type="button" id="resClose" aria-label="Close research">Close</button></header>';
-    const cards = Sim.TKEYS.filter(shownTopic).map((k) => {
-      const T = Sim.TOPICS[k], r = rs[k], work = R.topics[k].work, pct = work ? Math.floor(100 * r.done / work) : 100, fx = topicEffects(k);
-      const state = r.complete ? ['done', r.finished > 0 ? 'Done at ' + fmtClock(r.finished) : 'Known from the start'] : r.weight > 0 ? ['active', 'In progress'] : r.done > 0 ? ['paused', 'Paused'] : ['ready', 'Ready to start'];
-      const eta = !r.complete && rr.per[k] ? Math.ceil((work - r.done) / rr.per[k]) : null;
-      const full = Math.ceil((work - r.done) / R.rate);
-      const ctl = r.complete ? '' : r.weight > 0
-        ? '<button type="button" data-res="' + k + '" data-w="0">Pause</button>'
-        : n ? '<button type="button" class="primary" data-focus="' + k + '">Do this next</button><button type="button" class="link" data-res="' + k + '" data-w="1">Run alongside</button>'
-        : '<button type="button" class="primary" data-res="' + k + '" data-w="1">' + (r.done ? 'Resume' : 'Start') + '</button>';
-      return '<article class="res-card ' + state[0] + '"><span class="state">' + state[1] + '</span><h3>' + T.name + '</h3>' +
-        (r.complete ? '' : '<span class="eta">' + (eta != null ? pct + '% · ' + eta + ' min left' : (r.done ? pct + '% · ' : '') + full + ' min at full pace') + '</span><div class="progress"><s style="width:' + pct + '%"></s></div>') +
-        '<ul class="unlocks" aria-label="Unlocks">' + fx.unlocks.map((u) => '<li>' + esc(u) + '</li>').join('') + '</ul>' +
-        (r.complete ? '' : '<ul class="fx">' + fx.gains.map((g) => '<li>' + esc(g) + '</li>').join('') + fx.costs.map((c) => '<li class="cost">' + esc(c) + '</li>').join('') + '</ul>') +
-        (ctl ? '<div class="res-ctl">' + ctl + '</div>' : '') + '</article>';
-    }).join('');
-    resEl.innerHTML = head + '<div class="res-cards">' + cards + '</div>';
+    const rs = S.research, R = S.R.research, rr = researchRates(), n = rr.act.length;
+    if (!resSel || (hideDone && rs[resSel].complete)) resSel = rr.act[0] || Sim.TKEYS.find((k) => tstate(k) === 'ready' || tstate(k) === 'paused') || Sim.TKEYS.find((k) => !rs[k].complete) || Sim.TKEYS[0];
+    const struct = [hideDone, resSel, S.resPlan.join(), n, Sim.TKEYS.map(tstate).join()].join('|');
+    if (struct !== resStruct) {
+      resStruct = struct;
+      const focused = document.activeElement && resEl.contains(document.activeElement) ? (document.activeElement.dataset.k ? 'k:' + document.activeElement.dataset.k : '#' + document.activeElement.id) : null;
+      const L = treeLayout(), doneN = Sim.TKEYS.filter((k) => rs[k].complete).length;
+      const lanes = L.rows.map((r) => '<h3 class="lane" style="grid-row:' + r.row + ' / span ' + r.span + '"><span>' + r.label + '</span></h3>').join('');
+      const nodes = L.shown.map((k) => {
+        const c = L.cell[k], st = tstate(k), step = S.resPlan.indexOf(k);
+        return '<button type="button" class="node ' + st + (k === resSel ? ' sel' : '') + '" data-k="' + k + '" style="grid-row:' + c.row + ';grid-column:' + (c.col + 1) + '" aria-pressed="' + (k === resSel) + '" aria-label="' + esc(Sim.TOPICS[k].name + ', ' + STATE_TEXT[st] + (step >= 0 ? ', step ' + (step + 1) + ' of the plan' : '')) + '">' +
+          '<span class="tile" style="--p:' + (st === 'done' ? 100 : Math.floor(100 * rs[k].done / R.topics[k].work)) + '%"><img alt="" src="' + topicIcon(k) + '">' + (step >= 0 ? '<i class="step">' + (step + 1) + '</i>' : '') + '</span>' +
+          '<span class="nm">' + esc(Sim.TOPICS[k].name) + '</span></button>';
+      }).join('');
+      const empty = L.shown.length ? '' : '<p class="tree-empty">Everything is researched. Show finished topics to look back over the tree.</p>';
+      resEl.innerHTML = '<header><h2>Research</h2><p class="res-cap">' + R.rate + ' points a minute' + (n > 1 ? ', split ' + n + ' ways' : '') + '. One topic at a time finishes soonest, and nothing pays off until a topic is done.</p>' +
+        '<button type="button" id="resHide" aria-pressed="' + hideDone + '">Hide finished (' + doneN + ')</button><button type="button" id="resClose" aria-label="Close research">Close</button></header>' +
+        '<div class="res-body"><div class="tree-wrap"><div class="tree" role="group" aria-label="Research tree" style="grid-template-columns: ' + L.template + '; grid-template-rows: repeat(' + Math.max(1, L.rows.reduce((m, r) => m + r.span, 0)) + ', auto)">' +
+        '<svg class="links" aria-hidden="true"></svg>' + lanes + nodes + '</div>' + empty + '</div>' +
+        '<aside class="topic" aria-labelledby="tpName">' + topicPane(resSel, rr) + '</aside></div>';
+      drawLinks();
+      if (focused) { const el = focused.startsWith('k:') ? resEl.querySelector('.node[data-k="' + focused.slice(2) + '"]') : resEl.querySelector(focused); if (el) el.focus(); }
+    }
+    // progress moves every minute: patch it in place rather than rebuild
+    resEl.querySelectorAll('.node').forEach((el) => { const k = el.dataset.k; if (!rs[k].complete) el.firstChild.style.setProperty('--p', Math.floor(100 * rs[k].done / R.topics[k].work) + '%'); });
+    const pr = document.getElementById('tpProg'); if (pr) pr.style.width = Math.floor(100 * rs[resSel].done / R.topics[resSel].work) + '%';
+    const ps = document.getElementById('tpState'), st = tstate(resSel);
+    if (ps && st === 'active') ps.textContent = 'In progress, ' + minsLeft(resSel, rr) + ' min left';
   }
+  // connectors: an elbow from each prerequisite's tile to the topic's tile
+  function drawLinks() {
+    const tree = resEl.querySelector('.tree'), svg = tree && tree.querySelector('.links');
+    if (!svg) return;
+    const box = tree.getBoundingClientRect(), tile = (k) => { const el = tree.querySelector('.node[data-k="' + k + '"] .tile'); return el && el.getBoundingClientRect(); };
+    svg.setAttribute('viewBox', '0 0 ' + box.width + ' ' + box.height); svg.setAttribute('width', box.width); svg.setAttribute('height', box.height);
+    const route = new Set(resSel && tstate(resSel) === 'locked' ? Sim.routeTo(S, resSel) : []), plan = new Set(S.resPlan);
+    let out = '';
+    tree.querySelectorAll('.node').forEach((el) => {
+      const k = el.dataset.k, b = tile(k);
+      Sim.prereqs(k).forEach((p) => {
+        const a = tile(p); if (!a) return;
+        const x1 = a.right - box.left, y1 = a.top + a.height / 2 - box.top, x2 = b.left - box.left, y2 = b.top + b.height / 2 - box.top, mx = x2 - 14;
+        const cls = S.research[p].complete ? 'met' : (route.has(k) && route.has(p)) || (plan.has(k) && plan.has(p)) ? 'route' : '';
+        out += '<path class="' + cls + '" d="M' + x1 + ' ' + y1 + ' H' + mx + ' V' + y2 + ' H' + x2 + '"/>';
+      });
+    });
+    svg.innerHTML = out;
+  }
+  window.addEventListener('resize', () => { if (!resEl.hidden) drawLinks(); });
+  function selectTopic(k) { resSel = k; refreshResearch(); }
   resEl.addEventListener('click', (e) => {
     if (e.target.closest('#resClose')) { setResearch(false); return; }
+    if (e.target.closest('#resHide')) {
+      hideDone = !hideDone; try { localStorage.setItem('coffeeflow.hideDone', hideDone ? '1' : '0'); } catch (err) { /* storage unavailable */ }
+      refreshResearch(); return;
+    }
+    const nd = e.target.closest('[data-k]');
+    if (nd) { selectTopic(nd.dataset.k); return; }
     const b = e.target.closest('[data-res]');
-    if (b) { act('research', b.dataset.res, +b.dataset.w); resKey = ''; refreshResearch(); return; }
+    if (b) { act('research', b.dataset.res, +b.dataset.w); refreshResearch(); return; }
+    const pl = e.target.closest('[data-plan]');
+    if (pl) { act('plan', pl.dataset.plan); refreshResearch(); return; }
     const f = e.target.closest('[data-focus]');
-    if (f) { Sim.TKEYS.forEach((k) => { if (!S.research[k].complete) { const w = k === f.dataset.focus ? 1 : 0; if (S.research[k].weight !== w) act('research', k, w); } }); resKey = ''; refreshResearch(); }
+    if (f) { Sim.TKEYS.forEach((k) => { if (!S.research[k].complete) { const w = k === f.dataset.focus ? 1 : 0; if (S.research[k].weight !== w) act('research', k, w); } }); refreshResearch(); }
+  });
+  // arrow keys move between topics on the grid
+  resEl.addEventListener('keydown', (e) => {
+    const cur = e.target.closest && e.target.closest('.node'); if (!cur) return;
+    const dir = { ArrowRight: [1, 0], ArrowLeft: [-1, 0], ArrowDown: [0, 1], ArrowUp: [0, -1] }[e.key]; if (!dir) return;
+    e.preventDefault(); e.stopPropagation();
+    const at = (el) => { const r = el.getBoundingClientRect(); return [r.left + r.width / 2, r.top + r.height / 2]; }, [cx, cy] = at(cur);
+    let best = null, bestD = Infinity;
+    resEl.querySelectorAll('.node').forEach((el) => {
+      if (el === cur) return;
+      const [x, y] = at(el), dx = x - cx, dy = y - cy, along = dx * dir[0] + dy * dir[1], across = Math.abs(dx * dir[1] + dy * dir[0]);
+      if (along <= 4) return;
+      const dd = along + across * 3; if (dd < bestD) { bestD = dd; best = el; }
+    });
+    if (best) best.focus();
   });
 
   // =====================================================================
