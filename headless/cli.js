@@ -8,12 +8,13 @@
 //   node headless/cli.js solve  --gens 10 --pop 20      search for the best policy
 //   node headless/cli.js sweep  --rule demand.growAt=0.55,0.45,0.35   best achievable result for each rule value
 //   node headless/cli.js explore --samples 60 --refine 3   Monte Carlo: random rule sets and setups, ranked by how interesting they are
+//   node headless/cli.js levels --seeds 4               every preset bot on every level: won, lost and why
 //
-// Common options: --hours 8  --seeds 6  --rule key=value (repeatable)  --json  --workers N  --out file.json
+// Common options: --hours 8  --seeds 6  --rule key=value (repeatable)  --level kiosk  --json  --workers N  --out file.json
 'use strict';
 const fs = require('fs');
 const path = require('path');
-const { Sim, Bot } = require('./load');
+const { Sim, Levels, Bot } = require('./load');
 const { Pool } = require('./pool');
 
 // ---------- args ----------
@@ -27,7 +28,7 @@ function parseArgs(argv) {
   }
   return o;
 }
-const num = (v) => (v === 'true' ? true : v === 'false' ? false : isNaN(+v) ? v : +v);
+const num = (v) => (v === 'true' ? true : v === 'false' ? false : v === '' || isNaN(+v) ? v : +v);
 function rulesFrom(list) {
   const r = {};
   for (const s of list) { const i = s.indexOf('='); if (i < 0) throw new Error('Rules look like key=value, got ' + s); r[s.slice(0, i)] = num(s.slice(i + 1)); }
@@ -35,15 +36,31 @@ function rulesFrom(list) {
   return r;
 }
 
-const { money, pct, med, table, summarise, verdict, COLS, evalSpec, seedList, search, genesText } = require('./lib');
+const { money, pct, med, table, summarise, verdict, COLS, evalSpec, seedList, search, genesText, rulesFor } = require('./lib');
 const { explore, printExplore, toCSV } = require('./explore');
 
 // ---------- commands ----------
 async function cmdBench(o, pool, rules) {
   const hours = +o.hours || 8, seeds = seedList(+o.seeds || 6);
-  const start = Sim.rulesWith(rules).startCash, rows = [];
-  for (const [k, p] of Object.entries(Bot.PRESETS)) rows.push({ name: p.name, s: summarise(await evalSpec(pool, k, seeds, hours, rules), start) });
-  return { kind: 'bench', hours, seeds: seeds.length, rules, rows };
+  const start = Sim.rulesWith(rulesFor(rules, o.level)).startCash, rows = [];
+  for (const [k, p] of Object.entries(Bot.PRESETS)) rows.push({ name: p.name, s: summarise(await evalSpec(pool, k, seeds, hours, rules, o.level), start) });
+  return { kind: 'bench', hours, seeds: seeds.length, rules, level: o.level, rows };
+}
+
+// Every preset on every level (or one, with --level), on the level's own seed and the next few.
+async function cmdLevels(o, pool, rules) {
+  const hours = +o.hours || 12, n = +o.seeds || 4, rows = [];
+  for (const L of Levels.LEVELS.filter((l) => !o.level || l.id === o.level)) {
+    const seeds = seedList(n, L.seed);
+    for (const [k, p] of Object.entries(Bot.PRESETS)) {
+      const rs = await evalSpec(pool, k, seeds, hours, rules, L.id);
+      const won = rs.filter((r) => r.end && r.end.won);
+      const why = {}; rs.forEach((r) => { const w = !r.end ? 'unfinished' : r.end.won ? 'won' : r.end.why; why[w] = (why[w] || 0) + 1; });
+      rows.push({ level: L.n + ' ' + L.title, name: p.name, won: won.length, n: rs.length, mins: won.length ? med(won.map((r) => r.t / 60)) : null,
+        goals: med(rs.map((r) => r.goals)) + '/' + L.goals.length, why: Object.entries(why).map(([w, c]) => w + ' ' + c).join(', '), served: med(rs.map((r) => r.served)), sat: med(rs.map((r) => r.sat)) });
+    }
+  }
+  return { kind: 'levels', hours, rows };
 }
 
 async function cmdSolve(o, pool, rules) {
@@ -69,26 +86,27 @@ async function cmdSweep(o, pool) {
 }
 
 function cmdPlay(o, rules) {
-  const spec = o.bot || 'steady', seed = +o.seed || 1, hours = +o.hours || 8;
-  const S = Sim.create(seed, null, rules), bot = Bot.create(spec), story = [];
+  const spec = o.bot || 'steady', L = o.level ? Levels.byId(o.level) : null, seed = +o.seed || (L ? L.seed : 1), hours = +o.hours || 8;
+  const S = Sim.create(seed, null, rules, L), bot = Bot.create(spec), story = [];
   const say = (m) => story.push([S.t, m]);
   const rows = [];
-  for (let t = 0; t < hours * 3600; t++) {
+  for (let t = 0; t < hours * 3600 && !S.end; t++) {
     Bot.tick(bot, S, say); Sim.step(S);
     if (S.t % 3600 === 0) rows.push({ h: S.t / 3600, cash: S.cash, served: S.st.served, walked: S.st.abandoned, sat: S.st.sat, demand: S.st.demand, rate: Sim.rate(S), staff: S.workers.length, kit: S.items.filter((i) => i.built).map((i) => i.type).join(' ') });
   }
-  return { kind: 'play', name: bot.name, seed, hours, rules, story, rows, code: Sim.encode(S), hash: Sim.hash(S) };
+  return { kind: 'play', name: bot.name, seed, hours, rules, level: L && L.id, end: S.end, story, rows, code: Sim.encode(S), hash: Sim.hash(S) };
 }
 
 function cmdReplay(o) {
   const code = o._[1]; if (!code) throw new Error('Give a replay code: node headless/cli.js replay CF1-...');
   const d = Sim.decode(code);
   const last = d.log.length ? d.log[d.log.length - 1][0] : 0, ticks = o.hours ? +o.hours * 3600 : last + 1;
-  const S = Sim.create(d.seed, d.log, d.rules);
+  const L = d.level ? Levels.byId(d.level) : null;
+  const S = Sim.create(d.seed, d.log, d.rules, L);
   for (let t = 0; t < ticks; t++) Sim.step(S);
-  const T = Sim.create(d.seed, d.log, d.rules);
+  const T = Sim.create(d.seed, d.log, d.rules, L);
   for (let t = 0; t < ticks; t++) Sim.step(T);
-  return { kind: 'replay', seed: d.seed, rules: d.rules, version: d.version, current: d.current, actions: d.log.length, ticks,
+  return { kind: 'replay', seed: d.seed, rules: d.rules, level: d.level, end: S.end, version: d.version, current: d.current, actions: d.log.length, ticks,
     cash: S.cash, served: S.st.served, walked: S.st.abandoned, sat: S.st.sat, hash: Sim.hash(S), deterministic: Sim.hash(S) === Sim.hash(T) };
 }
 
@@ -96,21 +114,30 @@ function cmdReplay(o) {
 function print(out) {
   const rr = (r) => Object.keys(r || {}).length ? Object.entries(r).map(([k, v]) => k + '=' + v).join(' ') : 'default rules';
   if (out.kind === 'rules') { console.log(Object.entries(out.rules).map(([k, v]) => k.padEnd(30) + JSON.stringify(v)).join('\n')); return; }
+  const ended = (e) => (!e ? '' : (e.won ? 'WON' : 'LOST') + ' at ' + Math.floor(e.t / 3600) + 'h' + String(Math.floor(e.t / 60) % 60).padStart(2, '0') + ': ' + e.text);
+  if (out.kind === 'levels') {
+    console.log('Preset bots on each level · up to ' + out.hours + 'h\n');
+    console.log(table(out.rows, [{ h: 'level', f: (r) => r.level, left: true }, { h: 'policy', f: (r) => r.name, left: true }, { h: 'won', f: (r) => r.won + '/' + r.n },
+      { h: 'mins', f: (r) => (r.mins == null ? '-' : Math.round(r.mins)) }, { h: 'goals', f: (r) => r.goals }, { h: 'served', f: (r) => Math.round(r.served) }, { h: 'sat', f: (r) => pct(r.sat) },
+      { h: 'outcomes', f: (r) => r.why, left: true }])); return;
+  }
   if (out.kind === 'bench') {
-    console.log('Preset bots · ' + out.seeds + ' games × ' + out.hours + 'h · ' + rr(out.rules) + '\n');
+    console.log('Preset bots · ' + out.seeds + ' games × ' + out.hours + 'h · ' + (out.level ? 'level ' + out.level + ' · ' : '') + rr(out.rules) + '\n');
     console.log(table(out.rows, COLS)); return;
   }
   if (out.kind === 'play') {
-    console.log(out.name + ' · seed ' + out.seed + ' · ' + rr(out.rules) + '\n');
+    console.log(out.name + ' · seed ' + out.seed + ' · ' + (out.level ? 'level ' + out.level + ' · ' : '') + rr(out.rules) + '\n');
     out.story.forEach(([t, m]) => console.log('  ' + String(Math.floor(t / 3600)).padStart(2) + 'h' + String(Math.floor(t / 60) % 60).padStart(2, '0') + '  ' + m));
     console.log('\n' + table(out.rows, [
       { h: 'hour', f: (r) => r.h }, { h: 'cash', f: (r) => money(r.cash) }, { h: 'served', f: (r) => r.served }, { h: 'walked', f: (r) => r.walked },
       { h: 'sat', f: (r) => pct(r.sat) }, { h: 'demand', f: (r) => r.demand.toFixed(2) }, { h: 'arrivals/h', f: (r) => r.rate.toFixed(0) }, { h: 'staff', f: (r) => r.staff }, { h: 'kit', f: (r) => r.kit, left: true }]));
+    if (out.end) console.log('\n' + ended(out.end));
     console.log('\nreplay code (paste into the game\'s Replay box):\n' + out.code); return;
   }
   if (out.kind === 'replay') {
     console.log('seed ' + out.seed + ' · ' + rr(out.rules) + ' · ' + out.actions + ' actions · ran ' + out.ticks + ' ticks' + (out.current ? '' : ' · WARNING: made with sim version ' + out.version + ', this is ' + Sim.VERSION));
     console.log('cash ' + money(out.cash) + ' · served ' + out.served + ' · walked out ' + out.walked + ' · satisfaction ' + pct(out.sat));
+    if (out.end) console.log(ended(out.end));
     console.log('state hash ' + out.hash + ' · ' + (out.deterministic ? 'two runs match' : 'RUNS DIFFER')); return;
   }
   if (out.kind === 'solve') {
@@ -134,12 +161,13 @@ async function main() {
   const rules = rulesFrom(cmd === 'sweep' ? [] : o.rule);
   let out, pool;
   try {
+    if (o.level && !Levels.byId(o.level)) throw new Error('No level ' + o.level + '. Levels: ' + Levels.LEVELS.map((l) => l.id).join(', '));
     if (cmd === 'rules') out = { kind: 'rules', rules: Sim.flatRules(Sim.DEFAULT_RULES) };
     else if (cmd === 'play') out = cmdPlay(o, rules);
     else if (cmd === 'replay') out = cmdReplay(o);
-    else if (['bench', 'solve', 'sweep', 'explore'].includes(cmd)) {
+    else if (['bench', 'solve', 'sweep', 'explore', 'levels'].includes(cmd)) {
       pool = new Pool(+o.workers || undefined);
-      out = cmd === 'bench' ? await cmdBench(o, pool, rules) : cmd === 'solve' ? await cmdSolve(o, pool, rules) : cmd === 'sweep' ? await cmdSweep(o, pool) : await explore(pool, o);
+      out = cmd === 'bench' ? await cmdBench(o, pool, rules) : cmd === 'levels' ? await cmdLevels(o, pool, rules) : cmd === 'solve' ? await cmdSolve(o, pool, rules) : cmd === 'sweep' ? await cmdSweep(o, pool) : await explore(pool, o);
     } else { console.log(fs.readFileSync(__filename, 'utf8').split('\n').filter((l) => l.startsWith('//')).map((l) => l.slice(3)).join('\n')); return; }
   } finally { if (pool) await pool.close(); }
   if (o.out) fs.writeFileSync(o.out, JSON.stringify(out, null, 2));

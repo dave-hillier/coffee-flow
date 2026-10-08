@@ -1,6 +1,6 @@
 // Shared helpers for the headless commands: formatting, scoring and the policy search.
 'use strict';
-const { Sim, Bot } = require('./load');
+const { Sim, Levels, Bot } = require('./load');
 
 // ---------- formatting ----------
 const money = (p) => (p < 0 ? '-£' : '£') + (Math.abs(p) / 100).toFixed(0);
@@ -42,13 +42,17 @@ const COLS = [
 ];
 
 // Objective: business worth (cash + resale value of kit), with debt punished because a real shop can't run on it.
+// On a level, winning comes first and winning sooner is better; losing is worse than anything.
 function score(rs) {
   const s = summarise(rs, 0);
-  return s.worth - 2 * med(rs.map((r) => Math.max(0, -r.minCash)));
+  const level = med(rs.map((r) => (!r.end ? 0 : r.end.won ? 1e7 - r.t * 10 : -1e7 + r.goals * 1e6)));
+  return level + s.worth - 2 * med(rs.map((r) => Math.max(0, -r.minCash)));
 }
+// the rules a game runs under: a level's, then any overrides
+const rulesFor = (rules, level) => Object.assign({}, level ? Levels.byId(level).rules : {}, rules);
 
-async function evalSpec(pool, spec, seeds, hours, rules) {
-  return Promise.all(seeds.map((seed) => pool.run({ spec, seed, hours, rules })));
+async function evalSpec(pool, spec, seeds, hours, rules, level) {
+  return Promise.all(seeds.map((seed) => pool.run({ spec, seed, hours, rules, level })));
 }
 const seedList = (n, from) => Array.from({ length: n }, (_, i) => (from || 1) + i);
 
@@ -59,7 +63,7 @@ async function search(pool, o, rules, quiet) {
   const key = (g) => JSON.stringify(g);
   async function fitness(g) {
     const k = key(g); if (cache.has(k)) return cache.get(k);
-    const p = evalSpec(pool, { genes: g }, train, hours, rules).then((rs) => ({ g, rs, score: score(rs) }));
+    const p = evalSpec(pool, { genes: g }, train, hours, rules, o.level).then((rs) => ({ g, rs, score: score(rs) }));
     cache.set(k, p); return p;
   }
   let popn = Object.values(Bot.PRESETS).map((p) => Object.assign({}, p.genes));
@@ -80,10 +84,10 @@ async function search(pool, o, rules, quiet) {
     popn = next;
   }
   // Confirm on games the search never saw.
-  const start = Sim.rulesWith(rules).startCash;
-  const heldRs = await Promise.all(held.map((seed) => pool.run({ spec: { genes: best.g }, seed, hours, rules, keepCode: seed === held[0] })));
+  const start = Sim.rulesWith(rulesFor(rules, o.level)).startCash;
+  const heldRs = await Promise.all(held.map((seed) => pool.run({ spec: { genes: best.g }, seed, hours, rules, level: o.level, keepCode: seed === held[0] })));
   const presetRows = [];
-  for (const [k, p] of Object.entries(Bot.PRESETS)) presetRows.push({ name: p.name, s: summarise(await evalSpec(pool, k, held, hours, rules), start) });
+  for (const [k, p] of Object.entries(Bot.PRESETS)) presetRows.push({ name: p.name, s: summarise(await evalSpec(pool, k, held, hours, rules, o.level), start) });
   return { best, heldRs, start, hours, train: train.length, held: held.length, history, presetRows, evaluated: cache.size };
 }
 
@@ -105,4 +109,4 @@ function genesText(g) {
 }
 
 
-module.exports = { money, pct, med, table, summarise, verdict, COLS, score, evalSpec, seedList, search, genesText };
+module.exports = { money, pct, med, table, summarise, verdict, COLS, score, evalSpec, seedList, search, genesText, rulesFor };

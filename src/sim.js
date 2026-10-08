@@ -102,6 +102,15 @@
     startCash: 60000,
     // The starting setup. Equipment listed here starts built, in the standard layout (LAYOUT below).
     start: { workers: 1, demand: 0, sacks: 3, till: 0, pickup: 0, brewer: 0, grinder: 0, espresso: 0, pastry: 0, stock: 0, store: 0, milk: 0, syrup: 0 },
+    // The shop floor: columns x0..x1 and rows z0..9, inside the 12×10 plot. It must take in the front door (x 4 and 5)
+    // and the squares staff start on (x 4..6, z 7..8). The back door is in its back corner, at (x1, z0).
+    room: { x0: 0, x1: 11, z0: 0 },
+    // What this shop can have: equipment types and research lanes, as space-separated names.
+    allow: { items: 'till pickup brewer grinder espresso pastry stock store milk syrup', lanes: 'counter bar drinks menu beans guests team' },
+    // Losing. Overdrawn for overdrawnMins game minutes in all, or more than `overdraft` pence in the red, and the bank
+    // closes the shop. Satisfaction under `sat` for satMins minutes, judged once `after` customers have finished, and
+    // trade dries up. Each timer runs back down at the same pace while things are good. 0 minutes turns a check off.
+    fail: { overdraft: 0, overdrawnMins: 0, sat: 0, satMins: 0, after: 10 },
     // Beans come in sacks, ordered from a supplier and delivered to the back door after a lead time.
     supply: { sackDoses: 20, sackCost: 600, leadMins: 20 },
     // Research: capacity in units per game minute, split evenly (by weight) across the topics in progress, so three topics
@@ -226,6 +235,7 @@
     return o;
   }
   const inside = (c) => c.x >= 0 && c.x < GW && c.z >= 0 && c.z < IN;
+  const inRoom = (S, c) => { const R = S.R.room; return c.x >= R.x0 && c.x <= R.x1 && c.z >= R.z0 && c.z < IN; };
   // Where staff stand to use it. An 'any' item takes the first free side that can be reached (seen), if there is one.
   function wcell(it, g, seen) {
     const ns = side(it, SHAPE[it.type].ws);
@@ -239,6 +249,7 @@
   function rebuild(S) {
     const g = new Uint8Array(GW * GH);
     for (let x = 0; x < GW; x++) if (x !== 4 && x !== 5) g[10 * GW + x] = 1;
+    for (let z = 0; z < IN; z++) for (let x = 0; x < GW; x++) if (!inRoom(S, { x, z })) g[z * GW + x] = 1;
     S.items.forEach((it) => footprint(it).forEach((c) => { g[c.z * GW + c.x] = 1; }));
     S.grid = g; S.qcache = {}; S.wcache = null; S.acache = null;
     if (S.items.some((it) => SHAPE[it.type].ws === 'any')) {
@@ -365,22 +376,22 @@
   function canPlace(S, type, x, z, r) {
     const it = { type, x, z, r }, fp = footprint(it);
     for (const c of fp) {
-      if (c.x < 0 || c.x >= GW || c.z < 0 || c.z >= IN) return 'Outside the shop';
+      if (!inRoom(S, c)) return 'Outside the shop';
       if (S.grid[c.z * GW + c.x]) return 'That space is taken';
-      if (same(c, DOOR)) return 'Keep the back door clear';
+      if (same(c, S.door)) return 'Keep the back door clear';
     }
     for (const o of S.items) for (const a of [SHAPE[o.type].ws === 'any' ? null : o.wc, o.cc]) if (a && fp.some((c) => same(c, a))) return 'Blocks access to ' + label(S, o);
     const any = SHAPE[type].ws === 'any', wc = wcell(it, S.grid), cc = ccell(it);
     for (const a of [any ? null : wc, cc]) {
       if (!a) continue;
       const who = a === wc ? 'staff' : 'customers';
-      if (a.x < 0 || a.x >= GW || a.z < 0 || a.z >= IN || S.grid[a.z * GW + a.x]) return 'No room for ' + who + ' to stand';
+      if (!inRoom(S, a) || S.grid[a.z * GW + a.x]) return 'No room for ' + who + ' to stand';
     }
     if (cc && same(wc, cc)) return 'No room';
     const g = S.grid.slice(); fp.forEach((c) => { g[c.z * GW + c.x] = 1; });
     const seen = flood(g, STREET);
     if (any && !reachable(it, g, seen)) return 'No room for staff to reach it';
-    const need = any ? [DOOR] : [DOOR, wc]; if (cc) need.push(cc);
+    const need = any ? [S.door] : [S.door, wc]; if (cc) need.push(cc);
     for (const o of S.items) {
       if (SHAPE[o.type].ws !== 'any') need.push(o.wc);
       else if (!reachable(o, g, seen)) return 'Blocks access to ' + label(S, o);
@@ -411,6 +422,8 @@
   }
 
   // ---------- creation ----------
+  const allowed = (S, type) => S.R.allow.items.split(' ').includes(type);
+  const topicOpen = (S, k) => S.R.allow.lanes.split(' ').includes(TOPICS[k].lane);
   function ev(S, text, kind) { S.events.push({ n: ++S.evn, t: S.t, text, kind: kind || 'info' }); if (S.events.length > 40) S.events.shift(); }
   function addWorker(S, x, z) {
     const id = S.nextId++;
@@ -418,10 +431,20 @@
       all: true, patch: [], builds: [], task: null, claim: null, claimIdle: true, carry: null, util: 0, status: 'Idle', anim: 'idle', face: null, leaving: false, gone: false };
     S.workers.push(w); S.wmap[id] = w; return w;
   }
-  function create(seed, log, over) {
-    const R = rulesWith(over);
+  // the room has to hold the front door, the back door and the squares staff start on
+  function checkRoom(R) {
+    const { x0, x1, z0 } = R.room;
+    if (!(x0 >= 0 && x0 <= 4 && x1 >= 6 && x1 < GW && z0 >= 0 && z0 <= 7)) throw new Error('The room must cover x 4..6 and rows 7..9 of the plot');
+  }
+  // A game: seed, the action log to replay, rule overrides, and optionally a level (see src/levels.js). A level brings
+  // its own rules, under any overrides, plus goals to meet and an optional time limit.
+  function create(seed, log, over, level) {
+    const R = rulesWith(Object.assign({}, level ? level.rules : {}, over));
+    checkRoom(R);
     const S = {
       v: VERSION, R, over: Object.assign({}, over || {}), seed: seed >>> 0, t: 0, cash: R.startCash, open: false, nextId: 1, hired: 0, evn: 0,
+      level: level || null, door: doorOf(R), goal: 0, end: null,
+      judge: { red: 0, poor: 0, streak: 0, since: 0, from: { t: 0, served: 0, walked: 0, cash: R.startCash } },
       items: [], workers: [], customers: [], cups: [], imap: {}, wmap: {}, cmap: {}, upmap: {}, counts: {},
       menuOff: {}, log: [], pending: log ? log.map((a) => a.slice()) : [], events: [], served: [],
       supply: { door: R.start.sacks, onOrder: 0, orders: [], auto: { point: 0, qty: 0 }, grindPending: 0 },
@@ -475,7 +498,7 @@
   // ---------- beans and grounds ----------
   // the back door, in the side wall at the back corner: sacks are delivered outside it, the bin stands beside it,
   // and staff stand on this cell to fetch a sack or tip grounds. It stays clear of building.
-  const DOOR = { x: 11, z: 0 };
+  const doorOf = (R) => ({ x: R.room.x1, z: R.room.z0 });
   const hopperOf = (S, it) => S.R.items[it.type].hopper || 0;
   const knockOf = (S, it) => S.R.items[it.type].knock || 0;
   const beansInShop = (S) => S.items.reduce((n, i) => n + (i.built ? i.beans : 0), 0);          // in hoppers
@@ -509,7 +532,7 @@
     const src = sackSource(S, w);
     const done = () => { m.chore = null; w.load = null; };
     return mk('refill', [
-      { t: 'go', cell: src === 'door' ? DOOR : () => src.wc, shared: true, status: src === 'door' ? 'Fetching a sack from the back door' : 'Fetching a sack from the store' },
+      { t: 'go', cell: src === 'door' ? S.door : () => src.wc, shared: true, status: src === 'door' ? 'Fetching a sack from the back door' : 'Fetching a sack from the store' },
       { t: 'do', fn: () => { if (!S.imap[m.id] || !takeSack(S, src)) { done(); return 'stop'; } w.load = 'sack'; } },
       { t: 'go', cell: m.wc, shared: true, status: 'Carrying beans to ' + label(S, m) },
       { t: 'work', n: S.R.chores.refill, st: m.id, status: 'Filling the hopper' },
@@ -521,7 +544,7 @@
     st.chore = w.id;
     const done = () => { st.chore = null; w.load = null; };
     return mk('stock', [
-      { t: 'go', cell: DOOR, shared: true, status: 'Fetching a sack from the back door' },
+      { t: 'go', cell: S.door, shared: true, status: 'Fetching a sack from the back door' },
       { t: 'do', fn: () => { if (!S.imap[st.id] || S.supply.door <= 0) { done(); return 'stop'; } S.supply.door--; w.load = 'sack'; } },
       { t: 'go', cell: () => st.wc, shared: true, status: 'Carrying beans to the store' },
       { t: 'work', n: S.R.chores.refill, st: st.id, status: 'Stacking the shelf' },
@@ -536,7 +559,7 @@
       { t: 'go', cell: m.wc, status: 'Going to empty the knock box', near: m.id },
       { t: 'work', n: S.R.chores.empty, st: m.id, status: 'Emptying grounds' },
       { t: 'do', fn: () => { n = m.grounds; m.grounds = 0; m.chore = null; w.load = 'grounds'; } },
-      { t: 'go', cell: DOOR, shared: true, status: 'Taking grounds to the bin' },
+      { t: 'go', cell: S.door, shared: true, status: 'Taking grounds to the bin' },
       { t: 'work', n: S.R.chores.dump, st: null, status: 'Tipping grounds in the bin' },
       { t: 'do', fn: () => { S.st.groundsOut += n; done(); } }
     ], done);
@@ -923,9 +946,11 @@
   // ---------- actions ----------
   function apply(S, a) {
     const op = a[1];
+    if (S.end) return 'The game is over';
     if (op === 'place') {
       const type = a[2], x = a[3], z = a[4], r = a[5] & 3, c = S.R.CAT[type];
       if (!c) return 'Unknown item';
+      if (!allowed(S, type)) return 'Not for this shop';
       const locked = needsResearch(S, type); if (locked) return 'Needs research: ' + TOPICS[locked].name;
       if (S.cash < c.cost) return 'Not enough cash';
       const why = canPlace(S, type, x, z, r); if (why) return why;
@@ -986,6 +1011,7 @@
       const k = a[2], r = S.research[k];
       if (!r) return 'Unknown research';
       if (r.complete) return 'Already researched';
+      if (!topicOpen(S, k) && (a[3] | 0) > 0) return 'Not for this shop';
       const pre = prereqs(k).find((p) => !S.research[p].complete); if (pre && (a[3] | 0) > 0) return 'Needs research: ' + TOPICS[pre].name;
       r.weight = Math.max(0, Math.min(3, a[3] | 0));
       S.resPlan = [];   // choosing by hand drops any plan
@@ -997,6 +1023,7 @@
       if (!k) { S.resPlan = []; return null; }
       if (!S.research[k]) return 'Unknown research';
       if (S.research[k].complete) return 'Already researched';
+      if (routeTo(S, k).some((o) => !topicOpen(S, o))) return 'Not for this shop';
       S.resPlan = routeTo(S, k);
       for (const o of TKEYS) if (!S.research[o].complete) S.research[o].weight = o === S.resPlan[0] ? 1 : 0;
       return null;
@@ -1023,6 +1050,7 @@
   }
 
   function step(S) {
+    if (S.end) return;
     while (S.pending.length && S.pending[0][0] <= S.t) { const a = S.pending.shift(); apply(S, a); S.log.push(a); }
     S.t++;
     if (S.open && S.items.some((i) => i.built && i.type === 'till')) {
@@ -1058,6 +1086,57 @@
       record(S);
     }
     while (S.served.length && S.served[0] <= S.t - 3600) S.served.shift();
+    if (S.t % TPM === 0) judge(S);
+  }
+
+  // ---------- winning and losing ----------
+  // A level's goals are met one after another. Kinds: served n, cash n (pence), menu p, rate (n served in the last hour
+  // and door-to-cup under `lead` seconds, held for `mins`), trade (n customers an hour coming in), handsOff (`mins` with
+  // no actions, walk-outs at most walkPct% and cash ending higher).
+  function goalNow(S, g) {
+    if (g.kind === 'served') return { v: S.st.served, of: g.n };
+    if (g.kind === 'cash') return { v: Math.max(0, S.cash), of: g.n };
+    if (g.kind === 'menu') return { v: offered(S).includes(g.p) ? 1 : 0, of: 1 };
+    if (g.kind === 'trade') return { v: Math.floor(rate(S)), of: g.n };
+    return { v: S.judge.streak, of: g.mins };
+  }
+  const goalOf = (S) => (S.level && S.level.goals[S.goal]) || null;
+  function windowFrom(S) {
+    const j = S.judge;
+    j.streak = 0; j.acts = S.log.length; j.from = { t: S.t, served: S.st.served, walked: S.st.abandoned, cash: S.cash };
+  }
+  function finishGame(S, won, why, text) {
+    S.end = { won, why, text, t: S.t };
+    ev(S, text, won ? 'good' : 'bad');
+    mark(S, won ? 'won' : 'lost', text);
+  }
+  function judge(S) {
+    const F = S.R.fail, j = S.judge;
+    if (F.overdrawnMins > 0) {
+      if (S.cash < -F.overdraft) return finishGame(S, false, 'bankrupt', 'The bank stopped the overdraft and closed the shop.');
+      j.red = S.cash < 0 ? j.red + 1 : Math.max(0, j.red - 1);
+      if (j.red >= F.overdrawnMins) return finishGame(S, false, 'bankrupt', 'Overdrawn for too long: the bank closed the shop.');
+    }
+    if (F.satMins > 0 && S.st.served + S.st.abandoned >= F.after) {
+      j.poor = S.st.sat < F.sat ? j.poor + 1 : Math.max(0, j.poor - 1);
+      if (j.poor >= F.satMins) return finishGame(S, false, 'service', 'Customers stopped coming: the service was too poor for too long.');
+    }
+    for (let g = goalOf(S); g; g = goalOf(S)) {
+      if (g.kind === 'rate') j.streak = S.served.length >= g.n && (!g.lead || S.st.lead <= g.lead) ? j.streak + 1 : 0;
+      if (g.kind === 'handsOff') {
+        if (S.log.length !== j.acts) windowFrom(S);
+        else if ((j.streak = (S.t - j.from.t) / TPM) >= g.mins) {
+          const walked = S.st.abandoned - j.from.walked, done = walked + S.st.served - j.from.served;
+          if (walked * 100 > done * g.walkPct || S.cash <= j.from.cash) { windowFrom(S); ev(S, 'Not quite: the last hour had too many walk-outs or no profit. The clock starts again.', 'bad'); }
+        }
+      }
+      const p = goalNow(S, g);
+      if (p.v < p.of) break;
+      S.goal++; windowFrom(S);
+      ev(S, 'Goal met: ' + g.title, 'good'); mark(S, 'goal', g.title);
+      if (!goalOf(S)) return finishGame(S, true, 'goals', 'Every goal met.');
+    }
+    if (S.level && S.level.limitMins && S.t >= S.level.limitMins * TPM) finishGame(S, false, 'time', 'Out of time before the goals were met.');
   }
 
   // ---------- research ----------
@@ -1127,6 +1206,7 @@
   function encode(S) {
     const o = { v: S.v, s: S.seed, a: S.log };
     if (Object.keys(S.over).length) o.r = S.over;
+    if (S.level) o.l = S.level.id;
     const s = JSON.stringify(o);
     return 'CF1-' + btoa(s).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
   }
@@ -1136,15 +1216,15 @@
     let b = m[1].replace(/-/g, '+').replace(/_/g, '/'); while (b.length % 4) b += '=';
     const o = JSON.parse(atob(b));
     if (typeof o.s !== 'number' || !Array.isArray(o.a)) throw new Error('This code is damaged. Copy it again from the start.');
-    return { seed: o.s, log: o.a, rules: o.r || {}, version: o.v || 1, current: (o.v || 1) === VERSION };
+    return { seed: o.s, log: o.a, rules: o.r || {}, level: o.l || null, version: o.v || 1, current: (o.v || 1) === VERSION };
   }
   function hash(S) {
-    const s = JSON.stringify([S.t, S.cash, S.st, S.flow, S.research, S.supply.door, S.supply.onOrder, S.items.map((i) => [i.id, i.built, i.work, i.buf, i.queue, i.beans, i.grounds, i.sacks]),
+    const s = JSON.stringify([S.t, S.cash, S.st, S.goal, S.end, S.judge, S.flow, S.research, S.supply.door, S.supply.onOrder, S.items.map((i) => [i.id, i.built, i.work, i.buf, i.queue, i.beans, i.grounds, i.sacks]),
       S.workers.map((w) => [w.id, w.x, w.z, w.carry]), S.customers.map((c) => [c.id, c.x, c.z, c.state]), S.cups.map((c) => [c.id, c.state])]);
     let h = 0x811c9dc5; for (let i = 0; i < s.length; i++) { h ^= s.charCodeAt(i); h = Math.imul(h, 0x01000193); }
     return (h >>> 0).toString(16);
   }
 
   root.CoffeeSim = { VERSION, create, step, act, canPlace, whyNotRemove, whyNotOpen, offered, unlocked, rate, label, dimsOf, footprint,
-    wcell, ccell, encode, decode, hash, rulesWith, flatRules, DEFAULT_RULES, topicChanges, routeTo, prereqs, SHAPE, LAYOUT, DOOR, TOPICS, TKEYS, BASE, recipe, needsResearch, capOf, activityOf, CAT, PROD, PKEYS, GW, GH, IN, TPM };
+    wcell, ccell, encode, decode, hash, rulesWith, flatRules, DEFAULT_RULES, topicChanges, routeTo, prereqs, SHAPE, LAYOUT, TOPICS, TKEYS, BASE, recipe, needsResearch, capOf, allowed, topicOpen, inRoom, goalNow, goalOf, activityOf, CAT, PROD, PKEYS, GW, GH, IN, TPM };
 })(typeof window !== 'undefined' ? window : globalThis);

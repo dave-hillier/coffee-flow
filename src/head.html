@@ -82,13 +82,26 @@ button:disabled { opacity: 0.45; cursor: not-allowed; }
 @media (max-width: 1100px) { .bar { grid-template-columns: minmax(0, 1fr) auto; } .controls { grid-column: 2; } .pass { grid-column: 1 / -1; grid-row: 2; justify-self: center; } }
 
 /* splash */
-.splash { position: fixed; inset: 0; z-index: 20; display: grid; place-items: center; text-align: center; padding: 24px; background: rgba(12, 18, 26, 0.72); backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px); }
-.splash-inner { display: grid; gap: 20px; justify-items: center; }
+.splash { position: fixed; inset: 0; z-index: 20; display: grid; place-items: center; overflow-y: auto; text-align: center; padding: 24px 16px 48px; background: rgba(12, 18, 26, 0.72); backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px); }
+.splash-inner { display: grid; gap: 20px; justify-items: center; width: 100%; }
 .splash h1 { margin: 0; font-family: var(--font-display); font-weight: 400; font-size: clamp(44px, 9vw, 96px); letter-spacing: 4px; line-height: 1; text-shadow: 0 6px 0 #0a0f16; }
 .splash h1 em { font-style: normal; color: var(--accent); }
 .splash p { margin: 0; color: var(--muted); font-size: 16px; max-width: 34ch; }
 .splash-btns { display: flex; flex-wrap: wrap; justify-content: center; gap: 10px; }
 .splash-btns button { min-height: 44px; padding: 8px 20px; font-size: 16px; }
+.levels { width: min(560px, 100%); text-align: left; }
+.levels h2 { margin: 0 0 8px; font-size: 11px; font-weight: 400; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); }
+.levels ol { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
+.levels button { width: 100%; display: grid; grid-template-columns: 2.2em 1fr auto; gap: 2px 10px; align-items: baseline; text-align: left; padding: 10px 12px; background: var(--panel); }
+.levels .n { grid-row: span 2; font-family: var(--font-display); font-size: 20px; color: var(--accent); }
+.levels .t { font-size: 15px; }
+.levels .won { font-size: 12px; font-weight: 400; color: var(--good); }
+.levels .g { grid-column: 2 / -1; font-size: 12px; font-weight: 400; color: var(--muted); }
+.levels .next { border-color: var(--accent); }
+.end-k { font-size: 12px; letter-spacing: 0.08em; text-transform: uppercase; }
+.end.won h2 { color: var(--good); }
+.end.lost h2 { color: var(--bad); }
+.end .lesson { color: var(--fg); border-left: 3px solid var(--accent); padding-left: 10px; }
 .splash-foot { position: absolute; bottom: 18px; left: 0; right: 0; text-align: center; margin: 0; font-size: 12px; color: var(--muted); }
 
 /* stage */
@@ -489,13 +502,17 @@ section.research header { flex-wrap: wrap; }
     <div class="splash-inner">
       <h1 id="splashTitle">Coffee <em>Flow</em></h1>
       <p>A small café game about queues, capacity and getting drinks out the door.</p>
+      <button type="button" class="primary" id="splashResume" hidden>Back to the shop</button>
+      <nav class="levels" aria-labelledby="levelsTitle">
+        <h2 id="levelsTitle">Levels</h2>
+        <ol id="levels"></ol>
+      </nav>
       <div class="splash-btns">
-        <button type="button" class="primary" id="splashNew">New shop</button>
-        <button type="button" id="splashResume" hidden>Back to the shop</button>
+        <button type="button" id="splashNew">Free play</button>
         <button type="button" id="splashReplay">Watch a replay</button>
       </div>
     </div>
-    <p class="splash-foot" id="splashFoot">Scenario 1 · seed 1</p>
+    <p class="splash-foot" id="splashFoot">Free play · seed 1</p>
   </div>
   <header class="bar">
     <div class="money" aria-label="Money">
@@ -517,7 +534,7 @@ section.research header { flex-wrap: wrap; }
       <div class="more">
         <button type="button" id="moreBtn" aria-haspopup="menu" aria-expanded="false" aria-controls="moreMenu" aria-label="More tools" title="More tools">⋯</button>
         <div class="more-menu" id="moreMenu" role="menu" hidden>
-          <p class="more-h" id="scenario">Scenario 1 · seed 1</p>
+          <p class="more-h" id="scenario">Free play · seed 1</p>
           <button type="button" role="menuitemcheckbox" id="flowBtn" aria-checked="false">Flow charts<kbd>F</kbd></button>
           <button type="button" role="menuitem" id="replayBtn">Replay code</button>
           <button type="button" role="menuitem" id="playtestBtn">Playtest bots</button>
@@ -573,6 +590,16 @@ section.research header { flex-wrap: wrap; }
         </div>
         <div id="ptResults" class="pt-results"></div>
       </div>
+    </div>
+    <div class="modal" id="endModal" hidden role="dialog" aria-modal="true" aria-labelledby="endTitle" aria-describedby="endText">
+      <article class="sheet end">
+        <p class="end-k" id="endKicker"></p>
+        <h2 id="endTitle"></h2>
+        <p id="endText"></p>
+        <dl class="kv" id="endStats"></dl>
+        <p class="lesson" id="endLesson" hidden></p>
+        <div class="row" id="endBtns"></div>
+      </article>
     </div>
     <div class="modal" id="modal" hidden role="dialog" aria-modal="true" aria-labelledby="modalTitle">
       <div class="sheet">

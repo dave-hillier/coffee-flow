@@ -304,20 +304,36 @@
   }
 
   // ---------- the empty shop ----------
+  // Built from the room rule: wooden floor inside, paving around it, full walls at the back and left, low brick at the
+  // front (with the door gap at x 4..5) and right (with the back door in its back corner). Room edges are even, so
+  // walls come in whole 2-square segments.
   const room = new THREE.Group(); scene.add(room);
-  for (let i = 0; i < 6; i++) for (let j = 0; j < 5; j++) tile(room, 'wood', 2 * i, 2 * j);
-  for (let i = -1; i < 7; i++) tile(room, 'pave', 2 * i, 10.15);
-  for (let j = 0; j < 5; j++) tile(room, 'pave', 12.15, 2 * j);
-  ['plain', 'menu', 'menu', 'plain', 'window', 'plain'].forEach((t, i) => wallSeg(room, t, 2 * i));
-  const nw = new THREE.Group(); nw.rotation.y = Math.PI / 2; room.add(nw);
-  ['plain', 'plain', 'window', 'window', 'plain'].forEach((t, j) => wallSeg(nw, t, -(2 * j + 2)));
-  blk(room, mat.plaster, -T, 0, -T, T, H, T);
-  for (let i = 0; i < 6; i++) if (i !== 2) lowBrick(room, 2 * i, 10, 2, T);
-  for (let j = 0; j < 5; j++) if (j) lowBrick(room, 12, 2 * j, T, 2);
-  lowBrick(room, 12, 1, T, 1);
-  backDoor(room);
-  lowBrick(room, 12, 10, T, T);
-  blk(room, mat.mat, 4.3, 0, 8.9, 1.4, 0.02, 1);
+  const BACK_WALL = ['plain', 'menu', 'menu', 'plain', 'window', 'plain'], SIDE_WALL = ['plain', 'plain', 'window', 'window', 'plain'];
+  function buildRoom() {
+    while (room.children.length) room.remove(room.children[0]);
+    const { x0, x1, z0 } = S.R.room, x2 = x1 + 1;
+    for (let x = 0; x < Sim.GW; x += 2) for (let z = 0; z < Sim.IN; z += 2) {
+      if (x >= x0 && x < x2 && z >= z0) tile(room, 'wood', x, z);
+      else if (!(x === x2 && z >= z0)) tile(room, 'pave', x, z);
+    }
+    for (let i = -1; i < 7; i++) tile(room, 'pave', 2 * i, 10.15);
+    for (let z = z0; z < Sim.IN; z += 2) tile(room, 'pave', x2 + 0.15, z);
+    const back = new THREE.Group(); back.position.set(x0, 0, z0); room.add(back);
+    for (let i = 0; 2 * i < x2 - x0; i++) wallSeg(back, BACK_WALL[i % BACK_WALL.length], 2 * i);
+    const left = new THREE.Group(); left.position.set(x0, 0, z0); left.rotation.y = Math.PI / 2; room.add(left);
+    for (let j = 0; 2 * j < Sim.IN - z0; j++) wallSeg(left, SIDE_WALL[j % SIDE_WALL.length], -(2 * j + 2));
+    blk(room, mat.plaster, x0 - T, 0, z0 - T, T, H, T);
+    for (let x = x0; x < x2; x += 2) if (x !== 4) lowBrick(room, x, 10, 2, T);
+    for (let z = z0 + 2; z < Sim.IN; z += 2) lowBrick(room, x2, z, T, 2);
+    lowBrick(room, x2, z0 + 1, T, 1);
+    const bd = new THREE.Group(); bd.position.set(x2 - 12, 0, z0); room.add(bd); backDoor(bd);
+    lowBrick(room, x2, 10, T, T);
+    blk(room, mat.mat, 4.3, 0, 8.9, 1.4, 0.02, 1);
+    VIEW.target.set((x0 + x2) / 2, 0.6, (z0 + Sim.IN) / 2 + 0.5);
+    const k = Math.max(0.6, (x2 - x0) / 12, (Sim.IN - z0) / 10);
+    VIEW.halfW = 8.6 * k; VIEW.halfH = 6.4 * k;
+    buildGrid();
+  }
 
   const ground = new THREE.Mesh(new THREE.PlaneGeometry(120, 120), mat.ground);
   ground.rotation.x = -Math.PI / 2; ground.position.y = -0.11; ground.receiveShadow = true; scene.add(ground);
@@ -636,12 +652,25 @@
   let seenEvent = 0;
   const ticker = [];
 
-  function newGame(seed, log, rules) {
+  // levels, and which ones this browser has won
+  const Levels = window.CoffeeLevels;
+  let level = null;
+  function wonLevels() {
+    try { return new Set(JSON.parse(localStorage.getItem('coffeeflow.won') || '[]')); } catch (e) { return new Set(); }
+  }
+  function markWon(id) {
+    const won = wonLevels(); won.add(id);
+    try { localStorage.setItem('coffeeflow.won', JSON.stringify([...won])); } catch (e) { /* storage unavailable */ }
+  }
+
+  function newGame(seed, log, rules, lvl) {
     clearViews();
-    S = Sim.create(seed, log, rules); CAT = S.R.CAT; PROD = S.R.PROD;
+    level = lvl || null;
+    S = Sim.create(seed, log, rules, level); CAT = S.R.CAT; PROD = S.R.PROD;
     sel = null; hover = null; placing = null; armed = null; seenEvent = 0; ticker.length = 0; buildMode = false; tray = null; accessKey = ''; revealed.clear(); fresh.clear(); freshItems.clear(); seenDone.clear(); dismissed.clear(); goalsMet.clear(); ticketsEl.textContent = ''; dockKey = ''; suppliesKey = ''; pileN = -1; flowKey = ''; resStruct = ''; resSel = null; if (typeof closeCtx === 'function') closeCtx();
-    watching = !!(log && log.length); bot = null;
-    document.getElementById('scenario').textContent = 'Scenario 1 · seed ' + seed + (Object.keys(S.over).length ? ' · custom rules' : '');
+    watching = !!(log && log.length); bot = null; endShown = false; endModal.hidden = true;
+    buildRoom();
+    document.getElementById('scenario').textContent = (level ? 'Level ' + level.n + ' · ' + level.title : 'Free play · seed ' + seed) + (Object.keys(S.over).length ? ' · custom rules' : '');
     document.getElementById('scenario').title = Object.entries(S.over).map(([k, v]) => k + ' = ' + v).join('\n');
     document.getElementById('splashFoot').textContent = document.getElementById('scenario').textContent; passHtml = '';
     renderTicker(); refreshDock(); refreshPanel(true);
@@ -812,7 +841,7 @@
     while (pile.children.length) pile.remove(pile.children[0]);
     for (let k = 0; k < Math.min(n, 18); k++) {
       const m = sackMesh(), col = k % 3, row = Math.floor(k / 3) % 2, layer = Math.floor(k / 6);
-      m.position.set(12.4 + col * 0.38, layer * 0.25, 0.12 + row * 0.27); m.rotation.y = (k % 2) * 0.12;
+      m.position.set(S.R.room.x1 + 1.4 + col * 0.38, layer * 0.25, S.R.room.z0 + 0.12 + row * 0.27); m.rotation.y = (k % 2) * 0.12;
       pile.add(m);
     }
   }
@@ -949,13 +978,14 @@
   window.addEventListener('keydown', (e) => {
     if (e.target.closest && e.target.closest('textarea, input')) return;
     if (!splash.hidden) { if (e.key === 'Escape' && started) hideSplash(splashSpeed); return; }
+    if (!endModal.hidden) { if (e.key === 'Escape') closeEnd(); return; }
     if (e.key === 'Escape' && !moreMenu.hidden) { setMore(false); moreBtn.focus(); return; }
     if (e.code === 'Space') { e.preventDefault(); setSpeed(speed ? 0 : lastRunSpeed); }
     else if (/^Digit[1-5]$/.test(e.code)) setSpeed(SPEEDS[+e.code.slice(5) - 1]);
     else if (e.key === 'r' || e.key === 'R') { if (placing) { placing.r = (placing.r + 1) % 4; updateGhost(); refreshBuild(); } }
     else if ((e.key === 'b' || e.key === 'B') && document.getElementById('modal').hidden) { closeCtx(); setBuildMode(!buildMode); }
     else if ((e.key === 'f' || e.key === 'F') && document.getElementById('modal').hidden) setFlow(flowEl.hidden);
-    else if ((e.key === 't' || e.key === 'T') && document.getElementById('modal').hidden && (!toolLocked('research') || !resEl.hidden)) setResearch(resEl.hidden);
+    else if ((e.key === 't' || e.key === 'T') && document.getElementById('modal').hidden && (!toolLocked('research') && !resTool.hidden || !resEl.hidden)) setResearch(resEl.hidden);
     else if (e.key === 'Escape') {
       if (!document.getElementById('modal').hidden) closeModal();
       else if (!playModal.hidden) { closePlay(); setSpeed(wasSpeed); }
@@ -1029,7 +1059,7 @@
     const has = (t, built) => S.items.some((i) => i.type === t && (!built || i.built));
     const sellable = (built) => PKEYS.some((p) => has(PROD[p].machine, built));
     const who = S.workers[0] ? S.workers[0].name : 'your worker';
-    if (S.st.served > 0) return null;
+    if (S.st.served > 0 || (level && !level.tutorial)) return null;
     if (!(has('till') && has('pickup') && sellable(false))) {
       const next = !has('till') ? ['Place a till', 'Customers order and pay here. Pick Counters below, then Till.', 'counters']
         : !has('pickup') ? ['Place a pickup counter', 'Finished drinks wait here. It is in Counters too.', 'counters']
@@ -1051,7 +1081,42 @@
     ['cake', 'Put cake on the menu', () => (Sim.offered(S).includes('cake') ? 1 : 0), 1],
     ['cash2500', 'Have £2,500 in the bank', () => Math.floor(S.cash / 100), 2500]
   ];
+  // a level's goals come from the sim, which judges them; free play has its own milestones
+  function levelGoalTicket() {
+    const g = Sim.goalOf(S); if (!g) return null;
+    const p = Sim.goalNow(S, g), n = level.goals.length;
+    const left = level.limitMins ? ' · ' + fmtTime(Math.max(0, level.limitMins * 60 - S.t)) + ' left' : '';
+    const body = g.kind === 'served' ? p.v + ' of ' + p.of + ' served'
+      : g.kind === 'cash' ? money(p.v) + ' of ' + money(p.of)
+      : g.kind === 'rate' ? S.served.length + ' served in the last hour · held for ' + p.v + ' of ' + p.of + ' min'
+      : g.kind === 'trade' ? 'Now ' + p.v + ' an hour. Happy customers bring more.'
+      : g.kind === 'handsOff' ? p.v + ' of ' + p.of + ' min with no changes. Any change starts the clock again.'
+      : '';
+    return { sev: 'goal', k: (n > 1 ? 'Goal ' + (S.goal + 1) + ' of ' + n : 'Goal') + left, title: esc(g.title), bar: g.kind === 'menu' ? null : Math.max(0, p.v) / p.of, body };
+  }
+  function briefTicket() {
+    if (!level || dismissed.has('brief') || S.st.served > 0) return null;
+    return { sev: 'info', k: 'Level ' + level.n, title: esc(level.title), body: esc(level.brief), btn: 'Got it', act: 'none', dismiss: 'brief' };
+  }
+  // the ways a level is lost, while they are counting down
+  function failTickets() {
+    const F = S.R.fail, j = S.judge, out = [];
+    if (F.overdrawnMins > 0 && (S.cash < 0 || j.red > 0)) {
+      const left = F.overdrawnMins - j.red;
+      out.push(S.cash < 0
+        ? { sev: 'crit', k: 'Bank', title: 'Overdrawn', bar: left / F.overdrawnMins, body: 'Back in the black within ' + left + ' min, or the bank closes the shop. It stops you at ' + money(-F.overdraft) + '.' }
+        : { sev: 'warn', k: 'Bank', title: 'Back in the black', bar: left / F.overdrawnMins, body: 'The bank is watching for another ' + j.red + ' min.' });
+    }
+    if (F.satMins > 0 && S.st.served + S.st.abandoned >= F.after) {
+      const left = F.satMins - j.poor, happy = Math.round(S.st.sat * 100);
+      if (S.st.sat < F.sat) out.push({ sev: 'crit', k: 'Customers', title: 'Unhappy customers', bar: left / F.satMins, body: happy + '% happy. Under ' + Math.round(F.sat * 100) + '% for ' + left + ' more min and trade dries up.' });
+      else if (j.poor > 0) out.push({ sev: 'warn', k: 'Customers', title: 'Recovering', bar: left / F.satMins, body: happy + '% happy. Keep it up for ' + j.poor + ' min to be safe.' });
+      else if (S.st.sat < S.R.demand.growAt) out.push({ sev: 'warn', k: 'Customers', title: 'Trade is shrinking', body: happy + '% happy. Under ' + Math.round(S.R.demand.growAt * 100) + '%, fewer customers come back.' });
+    }
+    return out;
+  }
   function goalTicket() {
+    if (level) return levelGoalTicket();
     for (const [id, title, val, target] of GOALS) {
       if (goalsMet.has(id)) continue;
       const v = val();
@@ -1082,7 +1147,8 @@
     if (S.items.some((i) => i.built && S.R.items[i.type].hopper) && !S.supply.onOrder && sumCups() <= S.R.supply.sackDoses && sumCups() > 0)
       out.push({ sev: 'warn', k: 'Beans', title: 'Running low', body: 'About ' + sumCups() + ' cups left and nothing on order.', btn: S.cash >= S.R.supply.sackCost * 5 ? 'Order 5 sacks' : 'Order 1 sack', act: 'order', arg: S.cash >= S.R.supply.sackCost * 5 ? 5 : 1 });
     const burn = (S.workers.length * S.R.wagePerMin + S.R.rentPerMin) * 60;
-    if (S.cash < 0) out.push({ sev: 'crit', k: 'Money', title: 'In the red', body: 'Wages keep going out. Sell something or cut staff.' });
+    if (S.cash < 0 && S.R.fail.overdrawnMins > 0) { /* the bank's ticket covers it */ }
+    else if (S.cash < 0) out.push({ sev: 'crit', k: 'Money', title: 'In the red', body: 'Wages keep going out. Sell something or cut staff.' });
     else if ((S.open || S.st.arrived) && S.cash < burn) out.push({ sev: 'warn', k: 'Money', title: 'Cash is low', body: 'Less than an hour of wages and rent left.' });
     return out;
   }
@@ -1108,13 +1174,13 @@
   }
   function researchTicket() {
     if (!revealed.has('research')) return null;
-    const open = Sim.TKEYS.filter((k) => !S.research[k].complete);
+    const open = researchable().filter((k) => !S.research[k].complete);
     if (!open.length || open.some((k) => S.research[k].weight > 0)) return null;
     return { sev: 'info', k: 'Research', title: 'Nothing queued', body: 'Pick a topic to work on. It runs in the background.', btn: 'Open research', act: 'research' };
   }
   function refreshTickets() {
     const step = tutorialStep();
-    const list = [].concat(step ? [step] : [], problemTickets(), milestoneTickets(), researchTicket() || [], !step ? goalTicket() || [] : []);
+    const list = [].concat(step ? [step] : [], briefTicket() || [], failTickets(), problemTickets(), milestoneTickets(), researchTicket() || [], !step ? goalTicket() || [] : []);
     const order = { step: 0, crit: 1, warn: 2, good: 3, info: 4, goal: 5 };
     list.sort((a, b) => order[a.sev] - order[b.sev]);
     const shown = list.slice(0, 4), more = list.length - shown.length;
@@ -1181,6 +1247,7 @@
     for (const k of Sim.TKEYS) if (rs[k].complete && rs[k].finished > 0 && !seenDone.has(k)) { seenDone.add(k); (Sim.TOPICS[k].unlocks || []).forEach((t) => { if (CAT[t]) freshItems.add(t); }); }
     toolsEl.querySelectorAll('[data-tray]').forEach((b) => {
       const t = b.dataset.tray, build = BUILD_TRAYS[t];
+      b.hidden = build ? !build[1].some((x) => Sim.allowed(S, x)) : t === 'staff' && S.R.maxWorkers <= 1;
       if (!build) lockTool(b, t);
       const isNew = build ? build[1].some((x) => freshItems.has(x)) : fresh.has(t);
       const badge = b.querySelector('.badge');
@@ -1189,7 +1256,10 @@
       b.classList.toggle('call', !!(tutorialStep() && tutorialStep().act === 'tray' && tutorialStep().arg === t && tray !== t));
     });
     lockTool(resTool, 'research');
+    resTool.hidden = !researchable().length;
   }
+  // topics this shop can research at all
+  const researchable = () => Sim.TKEYS.filter((k) => Sim.topicOpen(S, k));
   // tools that aren't useful yet stay in the dock, greyed out, saying what brings them in
   const UNLOCK_WHY = {
     menu: 'Build a filter brewer to put drinks on the menu',
@@ -1238,7 +1308,7 @@
       '<div class="row">' +
         '<button type="button" data-order="1"' + (S.cash < cost ? ' disabled' : '') + '>Order 1 sack · ' + money(cost) + '</button>' +
         '<button type="button" data-order="5"' + (S.cash < cost * 5 ? ' disabled' : '') + '>Order 5 · ' + money(cost * 5) + '</button>' +
-        (Sim.needsResearch(S, 'auto') ? '<button type="button" id="autoBtn" disabled title="Research Standing orders first">Standing order · needs research</button>' :
+        (!Sim.topicOpen(S, 'standing') && Sim.needsResearch(S, 'auto') ? '' : Sim.needsResearch(S, 'auto') ? '<button type="button" id="autoBtn" disabled title="Research Standing orders first">Standing order · needs research</button>' :
         '<button type="button" id="autoBtn" aria-pressed="' + on + '" title="Order automatically when beans in the shop, at the back door and on order fall below a level">Standing order</button>') +
         (on ? '<span class="stepper" aria-label="Sacks per order"><button type="button" data-auto="qty" data-d="-1" aria-label="Fewer sacks">−</button><b>' + sp.auto.qty + '</b> sacks<button type="button" data-auto="qty" data-d="1" aria-label="More sacks">+</button></span>' +
           '<span class="stepper" aria-label="Reorder level">below<button type="button" data-auto="point" data-d="-10" aria-label="Lower level">−</button><b>' + sp.auto.point + '</b><button type="button" data-auto="point" data-d="10" aria-label="Higher level">+</button>cups</span>' : '') +
@@ -1341,7 +1411,7 @@
     document.getElementById('trayTitle').textContent = build ? build[0] : { menu: 'Menu', beans: 'Beans', staff: 'Staff' }[tray];
     document.getElementById('trayNote').textContent = build ? money(S.cash) + ' to spend · Esc to close' : tray === 'menu' ? 'Click a drink to take it off or put it back' : tray === 'staff' ? 'Pick someone to see what they do' : 'Workers carry sacks in from the back door to the hoppers';
     if (!build) return;
-    const types = build[1].filter((t) => { const l = Sim.needsResearch(S, t); return !l || S.research[l].weight > 0 || S.research[l].done > 0; });
+    const types = build[1].filter((t) => { const l = Sim.needsResearch(S, t); return Sim.allowed(S, t) && (!l || S.research[l].weight > 0 || S.research[l].done > 0); });
     const key = tray + '|' + types.map((t) => (S.cash >= CAT[t].cost ? 1 : 0) + (Sim.needsResearch(S, t) ? 'l' + Math.floor(S.research[Sim.needsResearch(S, t)].done / 10) : '') + (freshItems.has(t) ? 'n' : '')).join() + '|' + (tileFocus || '') + '|' + S.items.length;
     if (key === buildKey && !force) return; buildKey = key;
     const focus = tileFocus && types.includes(tileFocus) ? tileFocus : types[0];
@@ -1362,15 +1432,16 @@
     const w = e.target.closest('[data-worker]'); if (w) { setTray(null); sel = { kind: 'worker', id: +w.dataset.worker }; refreshPanel(true); }
   });
 
-  // grid overlay for build mode
-  const gridLines = (() => {
-    const pts = [];
-    for (let x = 0; x <= Sim.GW; x++) pts.push(x, 0.015, 0, x, 0.015, Sim.IN);
-    for (let z = 0; z <= Sim.IN; z++) pts.push(0, 0.015, z, Sim.GW, 0.015, z);
-    const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.Float32BufferAttribute(pts, 3));
-    const l = new THREE.LineSegments(g, new THREE.LineBasicMaterial({ color: 0xfff3dc, transparent: true, opacity: 0.55, depthWrite: false }));
-    l.visible = false; scene.add(l); return l;
-  })();
+  // grid overlay for build mode, over the room's floor
+  const gridLines = new THREE.LineSegments(new THREE.BufferGeometry(), new THREE.LineBasicMaterial({ color: 0xfff3dc, transparent: true, opacity: 0.55, depthWrite: false }));
+  gridLines.visible = false; scene.add(gridLines);
+  function buildGrid() {
+    const { x0, x1, z0 } = S.R.room, pts = [];
+    for (let x = x0; x <= x1 + 1; x++) pts.push(x, 0.015, z0, x, 0.015, Sim.IN);
+    for (let z = z0; z <= Sim.IN; z++) pts.push(x0, 0.015, z, x1 + 1, 0.015, z);
+    gridLines.geometry.dispose();
+    gridLines.geometry = new THREE.BufferGeometry(); gridLines.geometry.setAttribute('position', new THREE.Float32BufferAttribute(pts, 3));
+  }
   // staff and customer squares of everything already placed, shown in build mode
   const access = new THREE.Group(); scene.add(access);
   const accStaffM = B(0x7fb3e0, { transparent: true, opacity: 0.35, depthWrite: false }), accCustM = B(0xe0a458, { transparent: true, opacity: 0.35, depthWrite: false });
@@ -1432,7 +1503,7 @@
   function openFloorCtx(cell, e) {
     ctxFor = { kind: 'floor', cell, e };
     let h = '<h4>Build here</h4>';
-    BUILD_GROUPS.forEach(([, ts]) => ts.forEach((t) => {
+    Object.values(BUILD_TRAYS).forEach(([, ts]) => ts.filter((t) => Sim.allowed(S, t)).forEach((t) => {
       const c = CAT[t], f = fitAt(t, cell), short = c.cost - S.cash, locked = Sim.needsResearch(S, t);
       const why = locked ? 'needs research' : short > 0 ? 'need ' + money(short) : f.reason ? (f.reason === 'That space is taken' ? 'no room' : f.reason.toLowerCase()) : null;
       h += '<button type="button" role="menuitem" data-c="place" data-t="' + t + '" data-r="' + (f.r || 0) + '"' + (why ? ' disabled title="' + esc(why) + '"' : '') + '>' + c.name + '<span>' + (why ? esc(why) : price(c)) + '</span></button>';
@@ -1447,7 +1518,7 @@
     if (p && p.kind === 'item') { openItemCtx(p.id, e); return; }
     if (p && p.kind === 'worker') { if (buildMode) setBuildMode(false); sel = p; refreshPanel(true); return; }
     const c = pickCell();
-    if (c && c.x >= 0 && c.x < Sim.GW && c.z >= 0 && c.z < Sim.IN) openFloorCtx(c, e);
+    if (c && Sim.inRoom(S, c)) openFloorCtx(c, e);
   }
   ctxEl.addEventListener('click', (e) => {
     const b = e.target.closest('button[data-c]'); if (!b || b.disabled || !ctxFor) return;
@@ -1500,19 +1571,71 @@
   // ---------- splash ----------
   const splash = document.getElementById('splash');
   let splashSpeed = 1, started = false;
+  const levelsEl = document.getElementById('levels');
+  // the first level not yet won is the one to play next
+  function renderLevels() {
+    const won = wonLevels(), next = Levels.LEVELS.find((L) => !won.has(L.id));
+    levelsEl.innerHTML = Levels.LEVELS.map((L) => '<li><button type="button" data-level="' + L.id + '"' + (L === next ? ' class="next"' : '') + '>' +
+      '<span class="n" aria-hidden="true">' + L.n + '</span><b class="t">' + esc(L.title) + '</b>' + (won.has(L.id) ? '<span class="won">Won</span>' : '<span></span>') +
+      '<span class="g">' + esc(L.goals.map((g, i) => (i ? g.title[0].toLowerCase() + g.title.slice(1) : g.title)).join(', then ')) + (L.limitMins ? ' · within ' + fmtTime(L.limitMins * 60) : '') + '</span></button></li>').join('');
+    return next;
+  }
   function showSplash() {
     splashSpeed = speed || lastRunSpeed; setSpeed(0); setMore(false);
     document.getElementById('splashResume').hidden = !started;
-    splash.hidden = false; document.getElementById(started ? 'splashResume' : 'splashNew').focus({ preventScroll: true });
+    endModal.hidden = true;
+    const next = renderLevels();
+    splash.hidden = false;
+    (started ? document.getElementById('splashResume') : levelsEl.querySelector('[data-level="' + (next || Levels.LEVELS[0]).id + '"]')).focus({ preventScroll: true });
   }
   function hideSplash(run) { splash.hidden = true; started = true; setSpeed(run); }
+  function playLevel(L) {
+    newGame(L.seed, null, {}, L); resetView();
+    hideSplash(1);
+    if (L.tutorial) { setHint(true); setTimeout(() => setHint(false), 20000); }
+  }
+  levelsEl.addEventListener('click', (e) => { const b = e.target.closest('[data-level]'); if (b) playLevel(Levels.byId(b.dataset.level)); });
   document.getElementById('splashNew').addEventListener('click', () => {
-    if (started) { newGame(SEED); resetView(); }
+    newGame(SEED); resetView();
     hideSplash(1); setHint(true); setTimeout(() => setHint(false), 20000);
   });
   document.getElementById('splashResume').addEventListener('click', () => hideSplash(splashSpeed));
   document.getElementById('splashReplay').addEventListener('click', () => { hideSplash(0); openModal(); document.getElementById('codeIn').focus(); });
   document.getElementById('titleBtn').addEventListener('click', showSplash);
+
+  // ---------- the end of a level: won or lost, how it went, and where next ----------
+  const endModal = document.getElementById('endModal'), endBtns = document.getElementById('endBtns');
+  let endShown = false;
+  const LOST_TITLE = { bankrupt: 'Bankrupt', service: 'Trade dried up', time: 'Out of time' };
+  function showEnd() {
+    endShown = true; setSpeed(0); closeOverlays(); setMore(false);
+    const E = S.end, won = E.won, i = level ? Levels.LEVELS.indexOf(level) : -1, next = won && i >= 0 ? Levels.LEVELS[i + 1] : null;
+    if (won && level && !watching && !bot) markWon(level.id);
+    endModal.querySelector('.end').className = 'sheet end ' + (won ? 'won' : 'lost');
+    document.getElementById('endKicker').textContent = level ? 'Level ' + level.n + ' · ' + level.title : 'Free play';
+    document.getElementById('endTitle').textContent = won ? 'Level complete' : LOST_TITLE[E.why] || 'Game over';
+    document.getElementById('endText').textContent = E.text;
+    const st = S.st;
+    document.getElementById('endStats').innerHTML = [['Time', fmtTime(E.t)], ['Served', st.served], ['Walked out', st.abandoned], ['Happy', Math.round(st.sat * 100) + '%'], ['Cash', money(S.cash)]]
+      .map(([k, v]) => '<dt>' + k + '</dt><dd>' + v + '</dd>').join('');
+    const lesson = document.getElementById('endLesson');
+    lesson.hidden = !(won && level && level.lesson); lesson.textContent = level && level.lesson ? level.lesson : '';
+    endBtns.innerHTML = (next ? '<button type="button" class="primary" data-end="next">Next: ' + esc(next.title) + '</button>' : '') +
+      (level ? '<button type="button"' + (won ? '' : ' class="primary"') + ' data-end="again">' + (won ? 'Play again' : 'Try again') + '</button>' : '') +
+      '<button type="button" data-end="flow">See the flow charts</button><button type="button" data-end="levels">Choose a level</button><button type="button" data-end="code">Replay code</button>';
+    endModal.hidden = false;
+    endBtns.querySelector('button').focus({ preventScroll: true });
+  }
+  function closeEnd() { endModal.hidden = true; }
+  endBtns.addEventListener('click', (e) => {
+    const b = e.target.closest('[data-end]'); if (!b) return;
+    const a = b.dataset.end, i = Levels.LEVELS.indexOf(level);
+    if (a === 'next') playLevel(Levels.LEVELS[i + 1]);
+    else if (a === 'again') playLevel(level);
+    else if (a === 'levels') showSplash();
+    else if (a === 'flow') { closeEnd(); setFlow(true); }
+    else if (a === 'code') { closeEnd(); openModal(); }
+  });
 
   // ---------- selection panel ----------
   const panel = document.getElementById('panel');
@@ -1654,7 +1777,8 @@
     const raw = document.getElementById('codeIn').value || document.getElementById('codeOut').value;
     try {
       const d = Sim.decode(raw);
-      watchCode = raw; newGame(d.seed, d.log, d.rules); closeModal(); resetView();
+      watchCode = raw; newGame(d.seed, d.log, d.rules, d.level && Levels.byId(d.level)); closeModal(); resetView();
+      if (d.level && !Levels.byId(d.level)) note('This code is from a level this version of the game does not have, so it plays as free play.', 'bad');
       if (!d.current) note('This code was made with an older version of the game, so it may play out differently.', 'bad');
       if (d.log.length) { setSpeed(5); note('Watching a replay. Act at any point to take over.', 'warn'); }
       else {
@@ -1665,7 +1789,7 @@
   });
   let restartArmed = 0;
   document.getElementById('restartBtn').addEventListener('click', (e) => {
-    if (performance.now() < restartArmed) { restartArmed = 0; e.currentTarget.textContent = 'Start a new game'; newGame(SEED); closeModal(); setSpeed(1); resetView(); return; }
+    if (performance.now() < restartArmed) { restartArmed = 0; e.currentTarget.textContent = 'Start a new game'; if (level) newGame(level.seed, null, {}, level); else newGame(SEED); closeModal(); setSpeed(1); resetView(); return; }
     restartArmed = performance.now() + 4000; e.currentTarget.textContent = 'Click again to restart';
     setTimeout(() => { if (restartArmed && performance.now() >= restartArmed) document.getElementById('restartBtn').textContent = 'Start a new game'; }, 4100);
   });
@@ -1895,7 +2019,7 @@
   // the dock chip: what is being researched and how long is left, or a nudge when nothing is
   function refreshResTool() {
     if (toolLocked('research')) { resTool.classList.remove('idle', 'done'); document.getElementById('resLabel').textContent = 'Research'; return; }
-    const rr = researchRates(), open = Sim.TKEYS.filter((k) => !S.research[k].complete);
+    const rr = researchRates(), open = researchable().filter((k) => !S.research[k].complete);
     const label = document.getElementById('resLabel'), prog = document.getElementById('resProg');
     let text, cls = '', pct = 0;
     if (!open.length) { text = 'All researched'; cls = 'done'; }
@@ -1953,7 +2077,7 @@
   const STATE_TEXT = { done: 'Done', active: 'In progress', paused: 'Paused', ready: 'Ready to start', locked: 'Needs research first' };
   // grid cells for every shown topic, and the lane rows that hold anything
   function treeLayout() {
-    const shown = Sim.TKEYS.filter((k) => !(hideDone && S.research[k].complete));
+    const shown = researchable().filter((k) => !(hideDone && S.research[k].complete));
     const depth = {};
     const d = (k) => depth[k] || (depth[k] = 1 + Math.max(0, ...Sim.prereqs(k).filter((p) => shown.includes(p)).map(d)));
     // each lane's second set of chains starts one column after its own first set ends
@@ -2050,12 +2174,13 @@
   function refreshResearch() {
     if (resEl.hidden) return;
     const rs = S.research, R = S.R.research, rr = researchRates(), n = rr.act.length;
-    if (!resSel || (hideDone && rs[resSel].complete)) resSel = rr.act[0] || Sim.TKEYS.find((k) => tstate(k) === 'ready' || tstate(k) === 'paused') || Sim.TKEYS.find((k) => !rs[k].complete) || Sim.TKEYS[0];
+    const open = researchable();
+    if (!resSel || !open.includes(resSel) || (hideDone && rs[resSel].complete)) resSel = rr.act[0] || open.find((k) => tstate(k) === 'ready' || tstate(k) === 'paused') || open.find((k) => !rs[k].complete) || open[0];
     const struct = [hideDone, resSel, S.resPlan.join(), n, Sim.TKEYS.map(tstate).join()].join('|');
     if (struct !== resStruct) {
       resStruct = struct;
       const focused = document.activeElement && resEl.contains(document.activeElement) ? (document.activeElement.dataset.k ? 'k:' + document.activeElement.dataset.k : '#' + document.activeElement.id) : null;
-      const L = treeLayout(), doneN = Sim.TKEYS.filter((k) => rs[k].complete).length;
+      const L = treeLayout(), doneN = open.filter((k) => rs[k].complete).length;
       const lanes = L.rows.map((r) => '<h3 class="lane" style="grid-row:' + r.row + ' / span ' + r.span + '"><span>' + r.label + '</span></h3>').join('');
       const nodes = L.shown.map((k) => {
         const c = L.cell[k], st = tstate(k), step = S.resPlan.indexOf(k);
@@ -2278,7 +2403,7 @@
   let last = performance.now(), hudAt = 0;
   function frame(now) {
     const dt = Math.min(0.1, (now - last) / 1000); last = now;
-    if (speed > 0 && modal.hidden && playModal.hidden) {
+    if (speed > 0 && modal.hidden && playModal.hidden && endModal.hidden) {
       acc += dt * TPS * speed;
       let n = Math.floor(acc);
       if (n > 80) { n = 80; acc = n; }
@@ -2286,6 +2411,7 @@
       acc -= n;
     }
     const frac = speed > 0 ? acc : 0;
+    if (S.end && !endShown) showEnd();
     // events from the sim
     for (const e of S.events) if (e.n > seenEvent) { seenEvent = e.n; note(e.text, e.kind); }
     const nowMs = performance.now();

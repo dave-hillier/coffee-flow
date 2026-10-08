@@ -6,9 +6,9 @@ const { Worker, isMainThread, parentPort } = require('worker_threads');
 
 if (!isMainThread) {
   const { Bot } = require('./load');
-  parentPort.on('message', ({ id, spec, seed, hours, rules, keepCode }) => {
+  parentPort.on('message', ({ id, spec, seed, hours, rules, level, keepCode }) => {
     try {
-      const r = Bot.trial(spec, seed, hours, rules);
+      const r = Bot.trial(spec, seed, hours, rules, level);
       if (!keepCode) { delete r.code; }
       parentPort.postMessage({ id, r });
     } catch (e) { parentPort.postMessage({ id, err: e.message }); }

@@ -2,7 +2,7 @@
 //   node build.js              → dist/index.html, a complete document for GitHub Pages
 //   node build.js --fragment   → also fragment/coffee-flow.html, the same page without <html>/<head>/<body>
 //                                (for hosts that add their own document wrapper)
-// The page runs the same src/sim.js and src/bot.js that the headless tools load.
+// The page runs the same src/sim.js, src/levels.js and src/bot.js that the headless tools load.
 'use strict';
 const fs = require('fs');
 const path = require('path');
@@ -10,7 +10,7 @@ const src = (f) => fs.readFileSync(path.join(__dirname, 'src', f), 'utf8');
 const head = src('head.html');
 const split = head.indexOf('<div class="app">');
 if (split < 0) throw new Error('src/head.html must contain <div class="app">');
-const scripts = '<script>\n' + src('sim.js') + '\n' + src('bot.js') + '\n</script>\n<script>\n' + src('ui.js') + '\n</script>\n';
+const scripts = '<script>\n' + src('sim.js') + '\n' + src('levels.js') + '\n' + src('bot.js') + '\n</script>\n<script>\n' + src('ui.js') + '\n</script>\n';
 
 const page = '<!doctype html>\n<html lang="en">\n<head>\n<meta charset="utf-8">\n' +
   '<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">\n' +

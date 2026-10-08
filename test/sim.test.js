@@ -185,9 +185,9 @@ test('a flavoured latte follows its recipe: grinder, espresso machine, milk stat
 
 test('the back door stays clear: nothing is built on it or walls it off', () => {
   const S = Sim.create(1);
-  assert.match(Sim.act(S, 'place', 'stock', Sim.DOOR.x, Sim.DOOR.z, 0), /Keep the back door clear/);
-  assert.strictEqual(Sim.act(S, 'place', 'stock', Sim.DOOR.x - 1, Sim.DOOR.z, 0), null);
-  assert.match(Sim.act(S, 'place', 'stock', Sim.DOOR.x, Sim.DOOR.z + 1, 0), /cut off/);
+  assert.match(Sim.act(S, 'place', 'stock', S.door.x, S.door.z, 0), /Keep the back door clear/);
+  assert.strictEqual(Sim.act(S, 'place', 'stock', S.door.x - 1, S.door.z, 0), null);
+  assert.match(Sim.act(S, 'place', 'stock', S.door.x, S.door.z + 1, 0), /cut off/);
 });
 
 test('cumulative flow lines stay ordered and their gaps equal stock at each stage', () => {

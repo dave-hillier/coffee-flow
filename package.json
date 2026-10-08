@@ -5,10 +5,12 @@
   "description": "An isometric management game about flow, queues and capacity, with a headless runner and solver that share its simulation.",
   "scripts": {
     "build": "node build.js",
-    "test": "node --test test/sim.test.js",
+    "test": "node --test test/sim.test.js test/levels.test.js",
     "bench": "node headless/cli.js bench",
     "solve": "node headless/cli.js solve",
     "sweep": "node headless/cli.js sweep"
   },
-  "engines": { "node": ">=18" }
+  "engines": {
+    "node": ">=18"
+  }
 }

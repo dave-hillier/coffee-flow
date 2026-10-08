@@ -32,6 +32,39 @@ The icon row along the bottom opens trays for building, the menu, beans and staf
 aren't useful yet are greyed out, and hovering or focusing one says what brings it in. Problems, tutorial steps and goals hang on the ticket rail at the top left and come down when
 dealt with. Flow charts, replay codes, playtest bots and pixel mode are in the ⋯ menu.
 
+The title screen lists the levels, plus free play: the whole shop with no goals and no way to lose.
+
+## Levels
+
+Every level starts from an empty room and is built up by the player. Each one is ordinary data in `src/levels.js`:
+rule overrides (room size, cash, demand, what can be bought and researched, when the level is lost), a seed, a brief,
+goals met in order and an optional time limit. The sim judges goals and losses, so the headless tools score a level
+exactly as the game does.
+
+| Level | Room | What it is about |
+|---|---|---|
+| 1 The Kiosk | 6×4 | Tutorial. One worker, filter only, nothing to research. Serve 20. |
+| 2 Morning Rush | 6×6 | More trade than one person can serve; one hire allowed. Serve 60 in 5 hours. |
+| 3 The Corner Café | 8×6 | Research espresso and install it while trading, then serve 120 in 8 hours. |
+| 4 High Street | 10×8 | A full bar with milk and syrups. Keep up 25 served an hour for an hour, within 12 hours. |
+| 5 The Flagship | 12×10 | Everything. Grow trade to 25 customers an hour, then run an hour hands-off. |
+
+- **Rooms.** `room.x0`, `room.x1` and `room.z0` mark out the floor inside the 12×10 plot. The room must take in the
+  front door and the squares staff start on; the back door sits in its back corner. Even edges keep the walls whole.
+- **What a shop has.** `allow.items` and `allow.lanes` list, space-separated, the equipment that can be bought and the
+  research lanes that can be studied. Trays, tiles and research lanes outside them are hidden.
+- **Goals.** `served`, `cash`, `menu` (a product on the menu), `rate` (n served in the last hour, held for `mins`,
+  optionally with door-to-cup under `lead` seconds), `trade` (n customers an hour coming in) and `handsOff` (`mins` with
+  no actions at all, walk-outs at most `walkPct`% and cash ending higher; any action starts the clock again).
+- **Losing.** Overdrawn for `fail.overdrawnMins` minutes, or more than `fail.overdraft` pence in the red at once, and
+  the bank closes the shop. Satisfaction under `fail.sat` for `fail.satMins` minutes, judged once `fail.after`
+  customers have finished, and trade dries up. Both timers run back down at the same pace while things are good, so
+  a shop that keeps dipping under the line still loses. Past the time limit with goals unmet, the level is lost too.
+  The defaults turn every check off, which is free play.
+- **Progress.** Which levels this browser has won is kept in local storage; nothing else depends on it.
+- **Keeping levels winnable.** `test/levels.test.js` plays each level with a reference policy (a preset, or genes and
+  a hand-picked layout) and fails if it can no longer win. `node headless/cli.js levels` shows how the presets fare.
+
 ## Deploying
 
 Every push to `main` runs the tests, builds `dist/index.html`, smoke-tests the headless runner, and deploys `dist/`
@@ -44,25 +77,26 @@ One-time setup: in the repository's Settings, go to Pages and set Build and depl
 
 ```
 src/sim.js      the simulation: shop, customers, workers, stations, buffers, rules. Pure, deterministic, no DOM.
+src/levels.js   the levels: rule overrides, goals and briefs. Data only.
 src/bot.js      the player model: one policy with tunable genes; Solo / Steady / Rush are presets of it.
 src/ui.js       the browser game (three.js rendering, input, panels). Reads and acts on src/sim.js.
 src/head.html   page markup and styles.
 build.js        bundles src/ into dist/index.html, one self-contained page. --fragment also writes a
                 version without <html>/<head>/<body> for hosts that add their own.
-headless/       command-line runner and solver. Loads src/sim.js and src/bot.js unchanged.
-test/           determinism and rules tests.
+headless/       command-line runner and solver. Loads src/sim.js, src/levels.js and src/bot.js unchanged.
+test/           determinism, rules and level tests.
 out/            solver, sweep and explore results (JSON/CSV, not committed).
 docs/           the game design.
 ```
 
-The browser and Node load the same two files. Nothing in `src/sim.js` or `src/bot.js` knows which one it is running in.
+The browser and Node load the same three files. None of them knows which one it is running in.
 
 ## Commands
 
 Requires Node 18 or later. There are no dependencies to install.
 
 ```sh
-npm test                                     # replays rebuild exactly; rule overrides round-trip; no standing overlaps
+npm test                                     # replays rebuild exactly; rules round-trip; every level can still be won
 npm run build                                # writes dist/index.html
 
 node headless/cli.js rules                   # every balance rule and its default
@@ -72,6 +106,8 @@ node headless/cli.js bench --seeds 8         # the three preset bots side by sid
 node headless/cli.js solve --gens 12 --pop 20 --seeds 5      # search for the best policy, confirm on unseen games
 node headless/cli.js sweep --rule demand.base=9,15,30 --rule wagePerMin=15,8   # best achievable result per rule set
 node headless/cli.js explore --samples 100 --refine 3 --out out/explore.json --csv out/explore.csv   # Monte Carlo
+node headless/cli.js levels --seeds 4                     # every preset on every level: won, lost and why
+node headless/cli.js play --level rush --bot rush         # one game of a level, stopping when it is won or lost
 ```
 
 Common options:
@@ -82,6 +118,7 @@ Common options:
 | `--seeds 5` | Games per policy while searching. |
 | `--holdout 8` | Unseen games used to check the winner. |
 | `--rule key=value` | Override any balance rule (repeatable). In `sweep`, give comma-separated values. |
+| `--level id` | Play a level (`kiosk`, `rush`, `corner`, `high`, `flagship`) in `play`, `bench`, `solve` and `levels`. Its rules come first, then any `--rule`. On a level the solver puts winning first and winning sooner second. |
 | `--json` | Print machine-readable output. |
 | `--out file.json` | Save the result. |
 | `--workers N` | Number of worker threads (defaults to the number of cores). |
@@ -95,6 +132,7 @@ Override a value by its dotted path, for example `startCash`, `wagePerMin`, `ord
 Run `node headless/cli.js rules` for the full list.
 
 A game's overrides are stored in its replay code, so a solver result plays back in the browser with the same rules.
+A level game's code carries the level's id, and the level's own rules come from `src/levels.js`.
 The game's subtitle shows "custom rules" in that case. Codes also carry the simulation version (`Sim.VERSION`), and
 the game warns when a code was made with an older version. Bump the version whenever a change alters how existing
 replays play out.

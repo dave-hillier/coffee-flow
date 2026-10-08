@@ -57,15 +57,33 @@
   function create(spec) {
     const p = typeof spec === 'string' ? PRESETS[spec] : spec;
     const genes = Object.assign({}, PRESETS.solo.genes, p.genes || p);
-    return { name: p.name || 'Solved', blurb: p.blurb || '', g: genes, lastHire: -1e9, lastFire: -1e9, said: {}, roleKey: '' };
+    return { name: p.name || 'Solved', blurb: p.blurb || '', g: genes, layout: p.layout || null, lastHire: -1e9, lastFire: -1e9, said: {}, roleKey: '' };
   }
 
   const count = (S, t) => S.items.filter((i) => i.type === t).length;
   const builtOf = (S, t) => S.items.filter((i) => i.type === t && i.built);
   const cost = (S, t) => S.R.CAT[t].cost;
-  function tryPlace(S, type) {
-    for (const [x, z, r] of SLOTS[type] || []) if (!Sim.canPlace(S, type, x, z, r)) return !Sim.act(S, 'place', type, x, z, r);
-    return false;
+  // A layout of the bot's own if it has one ({ type: [[x, z, r], ...] }), or the standard layout in the full room.
+  // In a smaller room, the spot that keeps walks short: the till by the front door, everything else close to where
+  // staff stand at the till and pickup.
+  function tryPlace(S, type, layout) {
+    if (!Sim.allowed(S, type)) return false;
+    const R = S.R.room, full = R.x0 === 0 && R.x1 === Sim.GW - 1 && R.z0 === 0;
+    if (layout || full) {
+      for (const [x, z, r] of (layout || SLOTS)[type] || []) if (!Sim.canPlace(S, type, x, z, r)) return !Sim.act(S, 'place', type, x, z, r);
+      return false;
+    }
+    const door = { x: 4, z: 9 }, near = S.items.filter((i) => i.type === 'till' || i.type === 'pickup').map((i) => i.wc);
+    if (!near.length) near.push(door);
+    let best = null, bs = 1e9;
+    for (let r = 0; r < 4; r++) for (let z = R.z0; z < Sim.IN; z++) for (let x = R.x0; x <= R.x1; x++) {
+      if (Sim.canPlace(S, type, x, z, r)) continue;
+      const it = { type, x, z, r }, d = (a, b) => Math.abs(a.x - b.x) + Math.abs(a.z - b.z);
+      // counters face the door; the till's customers stand nearest it
+      const sc = (type === 'till' ? d(Sim.ccell(it), door) : near.reduce((n, c) => n + d(c, Sim.wcell(it)), 0)) + (Sim.SHAPE[type].cs && r ? 4 : 0);
+      if (sc < bs) { bs = sc; best = [x, z, r]; }
+    }
+    return !!best && !Sim.act(S, 'place', type, best[0], best[1], best[2]);
   }
   function pressure(S) {
     const tills = builtOf(S, 'till');
@@ -112,7 +130,7 @@
     // 1. Opening kit, in order, as cash allows.
     for (const t of ['till', 'pickup', 'brewer']) {
       if (count(S, t)) continue;
-      if (S.cash >= cost(S, t) && tryPlace(S, t)) log('kit' + t, 'ordering a ' + S.R.CAT[t].name.toLowerCase());
+      if (S.cash >= cost(S, t) && tryPlace(S, t, bot.layout)) log('kit' + t, 'ordering a ' + S.R.CAT[t].name.toLowerCase());
       return;
     }
 
@@ -121,20 +139,20 @@
       if (g.espressoSpare !== NEVER && !count(S, 'espresso')) {
         const need = cost(S, 'espresso') + (count(S, 'grinder') ? 0 : cost(S, 'grinder')) + g.espressoSpare;
         if (S.cash >= need) {
-          if (!count(S, 'grinder')) tryPlace(S, 'grinder');
-          if (tryPlace(S, 'espresso')) log('esp', 'buying a grinder and espresso machine');
+          if (!count(S, 'grinder')) tryPlace(S, 'grinder', bot.layout);
+          if (tryPlace(S, 'espresso', bot.layout)) log('esp', 'buying a grinder and espresso machine');
         }
       } else if (g.storeSpare !== NEVER && !count(S, 'stock') && S.cash >= cost(S, 'stock') + g.storeSpare) {
-        if (tryPlace(S, 'stock')) log('stock', 'marking out a stock area');
+        if (tryPlace(S, 'stock', bot.layout)) log('stock', 'marking out a stock area');
       } else if (g.cakeSpare !== NEVER && !count(S, 'pastry') && S.cash >= cost(S, 'pastry') + g.cakeSpare) {
-        if (tryPlace(S, 'pastry')) log('cake', 'buying a cake display');
+        if (tryPlace(S, 'pastry', bot.layout)) log('cake', 'buying a cake display');
       } else {
         const second = [['brewer', g.brewer2Queue], ['espresso', g.espresso2Queue], ['till', g.till2Queue]];
         for (const [t, q] of second) {
           if (q === NEVER || count(S, t) !== 1 || !builtOf(S, t).length || p.queue < q) continue;
           if (t === 'espresso' && !count(S, 'espresso')) continue;
           if (S.cash < cost(S, t) + g.spare) continue;
-          if (tryPlace(S, t)) { log(t + '2', 'queue is ' + p.queue + ', adding another ' + S.R.CAT[t].name.toLowerCase()); break; }
+          if (tryPlace(S, t, bot.layout)) { log(t + '2', 'queue is ' + p.queue + ', adding another ' + S.R.CAT[t].name.toLowerCase()); break; }
         }
       }
     }
@@ -184,13 +202,15 @@
 
   function tick(bot, S, say) { if (S.t % EVERY === 0) decide(bot, S, say); }
 
-  // Play a whole game headlessly. Returns a summary; the replay code rebuilds the game exactly.
-  function trial(spec, seed, hours, rules) {
-    const S = Sim.create(seed, null, rules), bot = create(spec), T = hours * 3600;
+  // Play a whole game headlessly, on a level (its id or the level itself) if given. A level stops when it is won or
+  // lost. Returns a summary; the replay code rebuilds the game exactly.
+  function trial(spec, seed, hours, rules, level) {
+    const L = typeof level === 'string' ? root.CoffeeLevels.byId(level) : level || null;
+    const S = Sim.create(seed, null, rules, L), bot = create(spec), T = hours * 3600;
     const cash = [];
     let minCash = S.cash, opened = -1, espressoAt = -1;
     const hourly = [];
-    for (let t = 0; t < T; t++) {
+    for (let t = 0; t < T && !S.end; t++) {
       tick(bot, S);
       Sim.step(S);
       if (S.cash < minCash) minCash = S.cash;
@@ -203,7 +223,7 @@
     // what the business is worth if sold now: cash plus what the equipment would fetch
     const worth = S.cash + S.items.reduce((v, i) => v + (i.built ? Math.floor(S.R.CAT[i.type].cost / 2) : S.R.CAT[i.type].cost), 0);
     return {
-      seed, hours, cash, finalCash: S.cash, worth, minCash, opened, espressoAt,
+      seed, hours, level: L ? L.id : null, end: S.end, goals: S.goal, t: S.t, cash, finalCash: S.cash, worth, minCash, opened, espressoAt,
       research: Object.fromEntries(Sim.TKEYS.map((k) => [k, S.research[k].finished])), researchLost: st.researchLost || 0,
       lastHour: n >= 2 ? hourly[n - 1] - hourly[n - 2] : 0,
       served: st.served, abandoned: st.abandoned, arrived: st.arrived, sat: st.sat, lead: st.lead, demand: st.demand,
