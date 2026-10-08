@@ -98,6 +98,9 @@ button:disabled { opacity: 0.45; cursor: not-allowed; }
 .levels .won { font-size: 12px; font-weight: 400; color: var(--good); }
 .levels .g { grid-column: 2 / -1; font-size: 12px; font-weight: 400; color: var(--muted); }
 .levels .next { border-color: var(--accent); }
+.levels button:disabled { cursor: default; opacity: 0.55; }
+.levels button:disabled .n { color: var(--muted); }
+.levels .lock { font-size: 12px; font-weight: 400; color: var(--muted); }
 .end-k { font-size: 12px; letter-spacing: 0.08em; text-transform: uppercase; }
 .end.won h2 { color: var(--good); }
 .end.lost h2 { color: var(--bad); }

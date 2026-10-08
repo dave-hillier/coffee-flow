@@ -32,7 +32,8 @@ The icon row along the bottom opens trays for building, the menu, beans and staf
 aren't useful yet are greyed out, and hovering or focusing one says what brings it in. Problems, tutorial steps and goals hang on the ticket rail at the top left and come down when
 dealt with. Flow charts, replay codes, playtest bots and pixel mode are in the ⋯ menu.
 
-The title screen lists the levels, plus free play: the whole shop with no goals and no way to lose.
+The title screen lists the levels, plus free play: the whole shop with no goals and no way to lose. Only the first
+level is open at the start; winning a level unlocks the next. Typing `doppio` on the title screen unlocks them all.
 
 ## Levels
 
@@ -61,7 +62,7 @@ exactly as the game does.
   customers have finished, and trade dries up. Both timers run back down at the same pace while things are good, so
   a shop that keeps dipping under the line still loses. Past the time limit with goals unmet, the level is lost too.
   The defaults turn every check off, which is free play.
-- **Progress.** Which levels this browser has won is kept in local storage; nothing else depends on it.
+- **Progress.** Which levels this browser has won, and whether the unlock code was used, is kept in local storage.
 - **Keeping levels winnable.** `test/levels.test.js` plays each level with a reference policy (a preset, or genes and
   a hand-picked layout) and fails if it can no longer win. `node headless/cli.js levels` shows how the presets fare.
 

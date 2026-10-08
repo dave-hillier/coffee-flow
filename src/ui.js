@@ -977,7 +977,7 @@
   }
   window.addEventListener('keydown', (e) => {
     if (e.target.closest && e.target.closest('textarea, input')) return;
-    if (!splash.hidden) { if (e.key === 'Escape' && started) hideSplash(splashSpeed); return; }
+    if (!splash.hidden) { if (e.key === 'Escape' && started) hideSplash(splashSpeed); else cheatKey(e); return; }
     if (!endModal.hidden) { if (e.key === 'Escape') closeEnd(); return; }
     if (e.key === 'Escape' && !moreMenu.hidden) { setMore(false); moreBtn.focus(); return; }
     if (e.code === 'Space') { e.preventDefault(); setSpeed(speed ? 0 : lastRunSpeed); }
@@ -1573,12 +1573,29 @@
   let splashSpeed = 1, started = false;
   const levelsEl = document.getElementById('levels');
   // the first level not yet won is the one to play next
+  // Winning a level unlocks the next. The cheat code unlocks them all.
+  const CHEAT = 'doppio';
+  let typed = '';
+  function allUnlocked() { try { return localStorage.getItem('coffeeflow.unlocked') === '1'; } catch (e) { return false; } }
+  function unlockAll() { try { localStorage.setItem('coffeeflow.unlocked', '1'); } catch (e) { /* storage unavailable */ } }
+  const isOpen = (L, won) => L.n === 1 || allUnlocked() || won.has(Levels.LEVELS[Levels.LEVELS.indexOf(L) - 1].id);
   function renderLevels() {
-    const won = wonLevels(), next = Levels.LEVELS.find((L) => !won.has(L.id));
-    levelsEl.innerHTML = Levels.LEVELS.map((L) => '<li><button type="button" data-level="' + L.id + '"' + (L === next ? ' class="next"' : '') + '>' +
-      '<span class="n" aria-hidden="true">' + L.n + '</span><b class="t">' + esc(L.title) + '</b>' + (won.has(L.id) ? '<span class="won">Won</span>' : '<span></span>') +
-      '<span class="g">' + esc(L.goals.map((g, i) => (i ? g.title[0].toLowerCase() + g.title.slice(1) : g.title)).join(', then ')) + (L.limitMins ? ' · within ' + fmtTime(L.limitMins * 60) : '') + '</span></button></li>').join('');
+    const won = wonLevels(), next = Levels.LEVELS.find((L) => !won.has(L.id) && isOpen(L, won));
+    levelsEl.innerHTML = Levels.LEVELS.map((L, i) => {
+      const open = isOpen(L, won), goals = L.goals.map((g, k) => (k ? g.title[0].toLowerCase() + g.title.slice(1) : g.title)).join(', then ') + (L.limitMins ? ' · within ' + fmtTime(L.limitMins * 60) : '');
+      return '<li><button type="button" data-level="' + L.id + '"' + (L === next ? ' class="next"' : '') + (open ? '' : ' disabled') + '>' +
+        '<span class="n" aria-hidden="true">' + L.n + '</span><b class="t">' + esc(L.title) + '</b>' + (won.has(L.id) ? '<span class="won">Won</span>' : open ? '<span></span>' : '<span class="lock">Locked</span>') +
+        '<span class="g">' + esc(open ? goals : 'Win ' + Levels.LEVELS[i - 1].title + ' to unlock') + '</span></button></li>';
+    }).join('');
     return next;
+  }
+  // typed on the title screen, letter by letter
+  function cheatKey(e) {
+    if (e.key.length !== 1) return;
+    typed = (typed + e.key.toLowerCase()).slice(-CHEAT.length);
+    if (typed !== CHEAT || allUnlocked()) return;
+    unlockAll(); renderLevels();
+    document.getElementById('levelsTitle').textContent = 'Levels · all unlocked';
   }
   function showSplash() {
     splashSpeed = speed || lastRunSpeed; setSpeed(0); setMore(false);
