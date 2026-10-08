@@ -594,7 +594,8 @@
     r.yaw += d * k; r.root.rotation.y = r.yaw;
   }
   function faceAgent(rig, a, p, faceId, k) {
-    if (a.path.length) { const n = a.path[0]; turn(rig, Math.atan2(n.x + 0.5 - p.x, n.z + 0.5 - p.z), k); return; }
+    // face along the step, not at the next tile's centre: near the end of a step that vector shrinks to the crowd offset and spins
+    if (a.path.length) { const n = a.path[0]; turn(rig, Math.atan2(n.x - a.x, n.z - a.z), k); return; }
     const it = faceId != null && S.imap[faceId];
     if (it) { const c = centreOf(it); turn(rig, Math.atan2(c.x - p.x, c.z - p.z), k); }
   }
