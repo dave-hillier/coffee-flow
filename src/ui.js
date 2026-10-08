@@ -463,6 +463,10 @@
   // Views
   // =====================================================================
   let S = null;
+  // Hooks for add-ons such as Workshop mode, exposed as window.CoffeeUI at the end of this file.
+  // quiet: hide the tutorial, goals and research nudges. tickets(): extra tickets for the rail.
+  // onTicket(act, arg): a rail button this file does not handle. onTick(S): after every sim step.
+  const hooks = { quiet: false, tickets: null, onTicket: null, onTick: null };
   const itemViews = new Map(), workerViews = new Map(), custViews = new Map(), cupViews = new Map();
   const tagFor = (cls) => { const d = document.createElement('div'); d.className = 'tag ' + cls; labelsEl.appendChild(d); return d; };
 
@@ -1113,8 +1117,8 @@
     return { sev: 'info', k: 'Research', title: 'Nothing queued', body: 'Pick a topic to work on. It runs in the background.', btn: 'Open research', act: 'research' };
   }
   function refreshTickets() {
-    const step = tutorialStep();
-    const list = [].concat(step ? [step] : [], problemTickets(), milestoneTickets(), researchTicket() || [], !step ? goalTicket() || [] : []);
+    const quiet = hooks.quiet, step = quiet ? null : tutorialStep();
+    const list = [].concat(hookTickets(), step ? [step] : [], problemTickets(), quiet ? [] : milestoneTickets(), quiet ? [] : researchTicket() || [], !step && !quiet ? goalTicket() || [] : []);
     const order = { step: 0, crit: 1, warn: 2, good: 3, info: 4, goal: 5 };
     list.sort((a, b) => order[a.sev] - order[b.sev]);
     const shown = list.slice(0, 4), more = list.length - shown.length;
@@ -1163,6 +1167,7 @@
     else if (a === 'open') act('open');
     else if (a === 'order') act('order', +arg);
     else if (a === 'research') setResearch(true);
+    else if (hooks.onTicket) hooks.onTicket(a, arg);
     refreshTickets();
   });
 
@@ -2282,7 +2287,7 @@
       acc += dt * TPS * speed;
       let n = Math.floor(acc);
       if (n > 80) { n = 80; acc = n; }
-      for (let i = 0; i < n; i++) { if (bot) Bot.tick(bot, S, botSay); Sim.step(S); }
+      for (let i = 0; i < n; i++) { if (bot) Bot.tick(bot, S, botSay); Sim.step(S); if (hooks.onTick) hooks.onTick(S); }
       acc -= n;
     }
     const frac = speed > 0 ? acc : 0;
@@ -2301,6 +2306,16 @@
     if (now - hudAt > 200) { hudAt = now; refreshStats(); refreshDock(); refreshTickets(); refreshPanel(); refreshReplayBar(); refreshBotBar(); refreshFlow(); refreshResearch(); }
     requestAnimationFrame(frame);
   }
+  // ---------- hooks for add-ons such as Workshop mode (src/workshop.js); `hooks` is declared with the game state ----------
+  function hookTickets() { try { return hooks.tickets ? hooks.tickets() || [] : []; } catch (e) { return []; } }
+  window.CoffeeUI = {
+    hooks, Sim,
+    get S() { return S; },
+    newGame(seed, rules) { newGame(seed, null, rules); resetView(); },
+    act, note, setSpeed, get speed() { return speed; },
+    showSplash, hideSplash, setFlow, setResearch, refresh() { refreshDock(); refreshPanel(true); refreshTickets(); }
+  };
+
   renderIcons();
   newGame(SEED);
   resize(); resetView();

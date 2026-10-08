@@ -484,6 +484,119 @@ section.research header { flex-wrap: wrap; }
   .topic { padding-left: 0; padding-top: 10px; border-left: 0; border-top: 1px solid var(--line); }
 }
 @media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
+
+/* Workshop mode (src/workshop.js): presenter cards over the dimmed shop, sized to read on a shared screen.
+   Votes are order tickets on the rail's paper; reveals pair the story with the numbers. */
+.ws { position: fixed; inset: 0; z-index: 19; display: grid; place-items: center; padding: 16px; background: rgba(12, 18, 26, 0.78); backdrop-filter: blur(5px); -webkit-backdrop-filter: blur(5px); }
+.ws-card { width: min(1180px, 100%); max-height: 100%; box-sizing: border-box; display: grid; grid-template-rows: minmax(0, 1fr) auto; background: var(--panel); border: 1px solid var(--line); border-radius: 6px; box-shadow: 0 18px 50px rgba(0, 0, 0, 0.5); }
+.ws-body { min-height: 0; overflow-y: auto; padding: 26px 30px 20px; display: grid; gap: 18px; font-size: 18px; line-height: 1.4; }
+.ws-foot { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; padding: 12px 30px; border-top: 1px solid var(--line); }
+.ws-foot .ws-where { margin-right: auto; color: var(--muted); font-size: 13px; }
+.ws-foot button { min-height: 40px; padding-inline: 16px; font-size: 15px; }
+.ws-ghost { background: transparent; }
+.ws h2 { margin: 0; font-family: var(--font-display); font-weight: 400; font-size: clamp(24px, 2.6vw, 34px); line-height: 1.15; text-wrap: balance; }
+.ws-title { font-size: clamp(44px, 6vw, 76px) !important; letter-spacing: 3px; text-shadow: 0 5px 0 #0a0f16; }
+/* Silkscreen's ampersand reads as a euro sign, so it comes from the UI face */
+.ws-title em, .ws-script h1 em { font-style: normal; color: var(--accent); font-family: var(--font-ui); font-weight: 600; }
+.ws-k { font-size: 12px; letter-spacing: 0.12em; text-transform: uppercase; color: var(--accent); }
+.ws-stack { display: grid; gap: 12px; align-content: start; min-width: 0; }
+.ws-split { display: grid; grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr); gap: 30px; align-items: center; }
+.ws-head { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: end; gap: 12px; }
+.ws-lede { margin: 0; color: var(--muted); font-size: 19px; max-width: 62ch; }
+.ws-small, .ws-legend { margin: 0; color: var(--muted); font-size: 13px; }
+.ws-list { margin: 0; padding-left: 1.4em; display: grid; gap: 6px; }
+.ws-list b { color: var(--fg); }
+.ws-chat { margin: 0; display: flex; align-items: center; gap: 12px; color: var(--muted); font-size: 15px; }
+.ws-chat span { background: #f3e9d2; color: #2b2118; padding: 4px 12px; border-radius: 3px; font-weight: 600; white-space: nowrap; }
+.ws-cast { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+.ws-cast div { background: var(--panel-2); border: 1px solid var(--line); border-radius: 4px; padding: 8px 10px; display: grid; gap: 2px; }
+.ws-cast span { font-size: 13px; color: var(--muted); }
+.ws-hx { margin: 0; padding: 12px 14px; background: var(--panel-2); border-left: 4px solid var(--accent); border-radius: 0 4px 4px 0; font-size: 16px; }
+.ws-hx .ws-k { display: block; margin-bottom: 4px; }
+.ws-hx a { color: var(--accent); }
+.ws-flowbar { display: flex; height: 52px; border-radius: 4px; overflow: hidden; font-weight: 600; }
+.ws-flowbar i { font-style: normal; background: var(--good); color: var(--accent-ink); display: flex; align-items: center; padding-inline: 10px; }
+.ws-flowbar s { text-decoration: none; flex: 1; background: var(--line); display: flex; align-items: center; justify-content: flex-end; padding-inline: 10px; }
+.ws-q { margin: 0; font-size: 24px; font-weight: 600; text-wrap: balance; }
+.ws-opts { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; }
+.ws-opt { position: relative; display: grid; gap: 6px; align-content: start; text-align: left; padding: 18px 16px 16px; background: #f3e9d2; color: #2b2118; border: 0; border-radius: 2px; box-shadow: 0 4px 9px rgba(0, 0, 0, 0.45); font-size: 15px; line-height: 1.3; }
+.ws-opt::before { content: ''; position: absolute; top: 0; left: 0; right: 0; height: 6px; background: var(--staff); }
+.ws-opt:nth-child(1) { transform: rotate(-0.8deg); } .ws-opt:nth-child(3) { transform: rotate(0.6deg); }
+.ws-opt b { font-size: 19px; }
+.ws-opt > span:last-child { color: #4a3d2f; }
+.ws-opt .ws-key, .ws-och .ws-key { font-family: var(--font-display); font-size: 34px; line-height: 1; color: #b0702c; }
+.ws-opt.on { outline: 4px solid var(--accent); outline-offset: 3px; }
+.ws-opt.on::before { background: var(--accent); }
+.ws-opt.on .ws-key::after { content: '  room\2019s pick'; font-family: var(--font-ui); font-size: 12px; color: #7a6a52; vertical-align: middle; }
+.ws-opt:hover:not(:disabled) { border: 0; }
+.ws-formula { margin: 0; font-family: var(--font-display); font-size: clamp(26px, 3vw, 40px); color: var(--accent); }
+.ws-verdict { margin: 0; justify-self: start; background: var(--fg); color: var(--accent-ink); padding: 4px 10px; border-radius: 3px; font-size: 14px; font-weight: 600; }
+.ws-verdicts { display: flex; flex-wrap: wrap; gap: 8px; }
+.ws-table { width: 100%; border-collapse: collapse; font-size: 16px; font-variant-numeric: tabular-nums; }
+.ws-table th { font-size: 12px; font-weight: 400; color: var(--muted); text-align: right; padding: 6px 8px; letter-spacing: 0.06em; text-transform: uppercase; }
+.ws-table td { text-align: right; padding: 8px; border-top: 1px solid var(--line); }
+.ws-table th:first-child, .ws-table td:first-child { text-align: left; }
+.ws-chart { width: 100%; height: auto; background: var(--panel-2); border: 1px solid var(--line); border-radius: 4px; }
+.ws-chart text { fill: var(--muted); font-family: var(--font-ui); font-size: 12px; }
+.ws-chart .lab { fill: var(--fg); font-size: 13px; }
+.ws-chart .grid { stroke: var(--line); stroke-width: 1; }
+.ws-chart .fit { fill: none; stroke: var(--accent); stroke-width: 3.5; }
+.ws-chart .dot { fill: var(--fg); stroke: var(--panel-2); stroke-width: 2; }
+.ws-chart .bar.b0, .ws-legend .b0 { fill: var(--accent); background: var(--accent); }
+.ws-chart .bar.b1, .ws-legend .b1 { fill: var(--staff); background: var(--staff); }
+.ws-chart .bar.b2, .ws-legend .b2 { fill: var(--good); background: var(--good); }
+.ws-legend { display: flex; flex-wrap: wrap; gap: 14px; }
+.ws-legend i { display: inline-block; width: 12px; height: 12px; margin-right: 6px; vertical-align: -1px; }
+.ws-takes { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 12px; }
+.ws-takes div { background: var(--panel-2); border: 1px solid var(--line); border-radius: 4px; padding: 12px; display: grid; gap: 6px; align-content: start; }
+.ws-takes b { font-family: var(--font-display); font-weight: 400; font-size: 17px; line-height: 1.15; }
+.ws-takes p { margin: 0; font-size: 14px; color: var(--muted); }
+.ws-takes code { font: 13px var(--font-ui); color: var(--accent); }
+.ws-meter { margin: 0; color: var(--muted); }
+.ws-meter b { color: var(--fg); font-size: 22px; }
+.ws-persona { align-items: start; }
+.ws-face { display: flex; gap: 14px; align-items: center; }
+.ws-face > span { font-size: 64px; line-height: 1; }
+.ws-face div { display: grid; gap: 4px; }
+.ws-deadline { color: var(--bad); font-weight: 600; }
+.ws-speech { margin: 0; background: #f3e9d2; color: #2b2118; padding: 14px 16px; border-radius: 12px 12px 12px 3px; font-size: 19px; }
+.ws-och { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 4px 14px; text-align: left; padding: 12px 14px; font-size: 15px; line-height: 1.3; background: var(--panel-2); }
+.ws-och.on { border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent); }
+.ws-och .ws-key { color: var(--accent); }
+.ws-och-b { display: grid; gap: 4px; }
+.ws-och-b > span { color: var(--muted); }
+.ws-time { display: flex; align-items: center; gap: 8px; font-size: 12px; }
+.ws-track { position: relative; flex: 1; height: 8px; background: var(--line); border-radius: 4px; }
+.ws-track s { display: block; height: 100%; border-radius: 4px; background: var(--good); }
+.ws-track s.late { background: var(--bad); }
+.ws-track i { position: absolute; top: -5px; bottom: -5px; width: 3px; background: var(--fg); }
+.ws-out { display: block; padding: 6px 10px; border-radius: 3px; color: var(--accent-ink) !important; }
+.ws-out.good { background: var(--good); } .ws-out.meh { background: var(--accent); } .ws-out.bad { background: var(--bad); }
+/* the strip along the bottom of the shop while a round runs */
+.ws-bar { position: absolute; left: 50%; bottom: 12px; transform: translateX(-50%); z-index: 3; width: max-content; max-width: calc(100% - 24px); box-sizing: border-box; display: flex; flex-wrap: wrap; align-items: center; gap: 10px 12px; padding: 8px 10px 8px 14px; background: var(--panel); border: 1px solid var(--accent); border-radius: 6px; box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45); }
+.ws-bar-t { display: grid; gap: 1px; }
+.ws-bar-t b { font-family: var(--font-display); font-weight: 400; font-size: 16px; }
+.ws-banner { font-size: 12px; color: var(--accent); max-width: 34ch; }
+.ws-chips { display: inline-flex; flex-wrap: wrap; gap: 4px; }
+.ws-chips button { min-height: 32px; font-size: 13px; }
+.ws-prog { width: 110px; height: 8px; background: var(--line); border-radius: 4px; overflow: hidden; }
+.ws-prog s { display: block; height: 100%; background: var(--accent); }
+.ws-clock { font-size: 14px; font-variant-numeric: tabular-nums; min-width: 4.5em; }
+/* #script: the presenter script on a second screen, instead of the game */
+.ws-script-mode .app { display: none; }
+.ws-script { max-width: 860px; margin: 0 auto; padding: 24px 16px 60px; display: grid; gap: 14px; font-size: 16px; line-height: 1.45; }
+.ws-script h1 { margin: 0; font-family: var(--font-display); font-weight: 400; font-size: 26px; color: var(--accent); }
+.ws-script > p { margin: 0; color: var(--muted); }
+.ws-script section { background: var(--panel); border: 1px solid var(--line); border-radius: 6px; padding: 12px 16px; display: grid; gap: 6px; }
+.ws-script h2 { margin: 0; font-size: 13px; color: var(--accent); letter-spacing: 0.08em; text-transform: uppercase; font-weight: 400; }
+.ws-script p { margin: 0; }
+.ws-script b { display: inline-block; min-width: 4.5em; color: var(--muted); font-weight: 400; font-size: 13px; text-transform: uppercase; letter-spacing: 0.06em; }
+@media (max-width: 900px) {
+  .ws-split, .ws-opts, .ws-takes { grid-template-columns: minmax(0, 1fr); }
+  .ws-body { padding: 18px 16px; font-size: 16px; }
+  .ws-foot { padding: 10px 16px; }
+  .ws-bar { left: 12px; right: 12px; transform: none; width: auto; }
+}
 </style>
 
 <div class="app">
@@ -495,6 +608,7 @@ section.research header { flex-wrap: wrap; }
         <button type="button" class="primary" id="splashNew">New shop</button>
         <button type="button" id="splashResume" hidden>Back to the shop</button>
         <button type="button" id="splashReplay">Watch a replay</button>
+        <button type="button" id="splashWorkshop" title="A 30-minute presenter-led session about flow, in four rounds">Workshop</button>
       </div>
     </div>
     <p class="splash-foot" id="splashFoot">Scenario 1 · seed 1</p>
