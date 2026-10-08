@@ -353,9 +353,11 @@
       box(el, o.skin, 0.08, 0.2, 0.08, 0, -0.12, 0);
       return { sh, el };
     });
+    // sacks and grounds are hugged to the chest with both arms; a cup sits in the right hand, kept upright in pose()
     const carry = new THREE.Group(); carry.position.set(0, 0.12, 0.3); torso.add(carry);
+    const hand = new THREE.Group(); hand.position.set(0, -0.23, 0.02); arms[0].el.add(hand);
     const hit = new THREE.Mesh(new THREE.BoxGeometry(0.75, 1.5, 0.75), mat.hit); hit.position.y = 0.75; root.add(hit);
-    return { root, body, hips, legs, arms, torso, head, carry, yaw: 0, ph: Math.random() * 6 };
+    return { root, body, hips, legs, arms, torso, head, carry, hand, cup: false, yaw: 0, ph: Math.random() * 6 };
   }
   const lerpR = (o, v, k) => { o.rotation.x += (v - o.rotation.x) * k; };
   function pose(r, anim, k) {
@@ -363,7 +365,9 @@
     let lh = 0, rh = 0, lk = 0, rk = 0, ls = 0, rs = 0, le = 0, re = 0, bob = 0, lean = 0;
     const moving = anim === 'walk' || anim === 'carry';
     if (moving) { lh = -s * 0.6; rh = s * 0.6; lk = Math.max(0, s) * 0.9; rk = Math.max(0, -s) * 0.9; bob = Math.abs(s) * 0.035; ls = s * 0.55; rs = -s * 0.55; le = re = -0.25; }
-    if (anim === 'carry' || anim === 'hold') { ls = rs = -1.0; le = re = -0.65; }
+    // a cup takes one hand: the right forearm held out level, the left arm free to swing
+    if ((anim === 'carry' || anim === 'hold') && r.cup) { ls = -0.45; le = -1.1; if (!moving) rs = re = 0; }
+    else if (anim === 'carry' || anim === 'hold') { ls = rs = -1.0; le = re = -0.65; }
     if (anim === 'work') { ls = -1.15 + s2 * 0.2; rs = -1.15 - s2 * 0.2; le = re = -0.55; lean = 0.08; }
     if (anim === 'build') { rs = -2.4 + Math.abs(Math.sin(ph * 1.4)) * 1.4; re = -0.3; ls = -0.9; le = -0.5; lh = -0.55; rh = 0.25; lk = 1.0; rk = 0.45; bob = -0.07; lean = 0.3; }
     if (anim === 'idle') { bob = Math.sin(ph * 0.35) * 0.008; }
@@ -371,6 +375,7 @@
     lerpR(r.arms[0].sh, ls, k); lerpR(r.arms[1].sh, rs, k); lerpR(r.arms[0].el, le, k); lerpR(r.arms[1].el, re, k);
     lerpR(r.torso, lean, k);
     r.body.position.y += (bob - r.body.position.y) * k;
+    r.hand.rotation.x = -(r.torso.rotation.x + r.arms[0].sh.rotation.x + r.arms[0].el.rotation.x);
   }
 
   // mood faces
@@ -691,6 +696,7 @@
       const p = agentPos(w, frac); v.root.position.set(p.x, 0, p.z);
       faceAgent(v.rig, w, p, w.face, k);
       v.rig.ph += dt * (w.anim === 'walk' || w.anim === 'carry' ? 9 : 6) * animRate;
+      v.rig.cup = !!w.carry && !w.load;
       pose(v.rig, w.anim, k);
       if (v.loadKind !== w.load) {
         if (v.loadMesh) { v.rig.carry.remove(v.loadMesh); v.loadMesh = null; }
@@ -714,7 +720,8 @@
       const p = agentPos(c, frac); v.root.position.set(p.x, 0, p.z);
       faceAgent(v.rig, c, p, c.face, k);
       const carrying = c.carry && c.state === 'leave';
-      if (carrying && !v.held) { v.held = makeCup(c.carry); v.held.userData.band.visible = false; v.rig.carry.add(v.held); }
+      if (carrying && !v.held) { v.held = makeCup(c.carry); v.held.userData.band.visible = false; v.held.position.set(0, -0.11, 0); v.rig.hand.add(v.held); }
+      v.rig.cup = !!v.held;
       const anim = carrying ? (c.anim === 'walk' ? 'carry' : 'hold') : c.anim;
       v.rig.ph += dt * (c.anim === 'walk' ? 8 : 5) * animRate;
       pose(v.rig, anim, k);
@@ -734,7 +741,7 @@
       let parent = null;
       if (cup.state === 'carried') {
         const w = S.workers.find((o) => o.carry === cup.id); const wv = w && workerViews.get(w.id);
-        if (wv) { parent = wv.rig.carry; v.root.position.set(0, 0, 0); }
+        if (wv) { parent = wv.rig.hand; v.root.position.set(0, -0.11, 0); }
       } else {
         const it = S.imap[cup.at], iv = it && itemViews.get(it.id), slots = iv && iv.slots;
         if (iv && slots) {
