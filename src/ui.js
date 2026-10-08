@@ -2197,7 +2197,10 @@
     const struct = [hideDone, resSel, S.resPlan.join(), n, Sim.TKEYS.map(tstate).join()].join('|');
     if (struct !== resStruct) {
       resStruct = struct;
-      const focused = document.activeElement && resEl.contains(document.activeElement) ? (document.activeElement.dataset.k ? 'k:' + document.activeElement.dataset.k : '#' + document.activeElement.id) : null;
+      // where keyboard focus was, as a selector that finds the same control after the rebuild
+      const fa = document.activeElement, d = fa && resEl.contains(fa) ? fa.dataset : null;
+      const focused = !d ? null : d.k ? '.node[data-k="' + d.k + '"]' : fa.id ? '#' + fa.id : d.res ? '[data-res="' + d.res + '"]'
+        : d.plan != null ? '[data-plan]' : d.focus ? '[data-res="' + d.focus + '"], [data-focus]' : '.node.sel';
       const L = treeLayout(), doneN = open.filter((k) => rs[k].complete).length;
       const lanes = L.rows.map((r) => '<h3 class="lane" style="grid-row:' + r.row + ' / span ' + r.span + '"><span>' + r.label + '</span></h3>').join('');
       const nodes = L.shown.map((k) => {
@@ -2213,7 +2216,7 @@
         '<svg class="links" aria-hidden="true"></svg>' + lanes + nodes + '</div>' + empty + '</div>' +
         '<aside class="topic" aria-labelledby="tpName">' + topicPane(resSel, rr) + '</aside></div>';
       drawLinks();
-      if (focused) { const el = focused.startsWith('k:') ? resEl.querySelector('.node[data-k="' + focused.slice(2) + '"]') : resEl.querySelector(focused); if (el) el.focus(); }
+      if (focused) { const el = resEl.querySelector(focused) || resEl.querySelector('.node.sel'); if (el) el.focus(); }
     }
     // progress moves every minute: patch it in place rather than rebuild
     resEl.querySelectorAll('.node').forEach((el) => { const k = el.dataset.k; if (!rs[k].complete) el.firstChild.style.setProperty('--p', Math.floor(100 * rs[k].done / R.topics[k].work) + '%'); });
