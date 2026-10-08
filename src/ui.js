@@ -923,8 +923,8 @@
     }
     const why = S.open ? null : Sim.whyNotOpen(S);
     // always there; greyed out with the reason until the shop can open
-    const label = S.open ? 'Open' : trading ? 'Closed' : 'Open shop';
-    if (openBtn.textContent !== label) openBtn.textContent = label;
+    const label = S.open ? 'open' : trading ? 'closed' : 'shut';
+    if (openBtn.dataset.label !== label) openBtn.dataset.label = label;
     openBtn.classList.toggle('is-open', S.open);
     openBtn.classList.toggle('call', !S.open && !why && !trading);
     if (why) { openBtn.setAttribute('aria-disabled', 'true'); openBtn.removeAttribute('title'); } else { openBtn.removeAttribute('aria-disabled'); openBtn.title = S.open ? 'Click to close: no new customers will arrive' : 'Let customers in'; }

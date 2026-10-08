@@ -65,7 +65,10 @@ button:disabled { opacity: 0.45; cursor: not-allowed; }
 .pass li.lead b { font-size: 17px; }
 .controls { grid-column: 3; display: flex; flex-wrap: nowrap; align-items: center; justify-content: flex-end; gap: 8px; }
 .clock { font-size: 16px; font-weight: 600; font-variant-numeric: tabular-nums; white-space: nowrap; }
-#openBtn { min-width: 84px; }
+/* every label sits in the same cell, so the button keeps the width of the longest */
+#openBtn { min-width: 84px; display: inline-grid; place-items: center; }
+#openBtn span { grid-area: 1 / 1; visibility: hidden; }
+#openBtn[data-label="shut"] [data-for="shut"], #openBtn[data-label="open"] [data-for="open"], #openBtn[data-label="closed"] [data-for="closed"] { visibility: visible; }
 #openBtn.is-open { background: var(--good); color: var(--accent-ink); border-color: var(--good); }
 #openBtn[aria-disabled="true"] { opacity: 0.45; cursor: not-allowed; }
 #openBtn[aria-disabled="true"]:hover { border-color: var(--line); }
@@ -491,7 +494,7 @@ section.research header { flex-wrap: wrap; }
     </div>
     <ol class="pass" id="pass" aria-label="Orders in the shop" hidden></ol>
     <div class="controls">
-      <button id="openBtn" type="button" aria-describedby="openWhy">Open shop</button><span class="why" id="openWhy"></span>
+      <button id="openBtn" type="button" aria-describedby="openWhy" data-label="shut"><span data-for="shut">Open shop</span><span data-for="open">Open</span><span data-for="closed">Closed</span></button><span class="why" id="openWhy"></span>
       <span class="clock" id="clock" title="Time trading"></span>
       <div class="seg" role="group" aria-label="Game speed" id="speed">
         <button type="button" data-speed="0" aria-pressed="false" title="Pause (Space)" aria-label="Pause">❚❚</button>
