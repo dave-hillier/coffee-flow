@@ -287,17 +287,35 @@
     blk(p, mat.stone, x - 0.02, 0.7, z - 0.02, w + 0.04, 0.06, d + 0.04);
   }
 
+  // the back door: a gap in the side wall at the back corner, the door swung open onto the alley, a wheelie bin beside it.
+  // Sacks are delivered on the paving outside (updatePile) and grounds go in the bin.
+  function backDoor(p) {
+    const doorM = L(0x3f5e4a), binM = L(0x2f6b45), binLid = L(0x24533a);
+    blk(p, mat.frame, 12, 0, -0.02, T, 2.05, 0.06);
+    blk(p, mat.frame, 12, 0, 0.96, T, 2.05, 0.06);
+    blk(p, mat.frame, 12, 2.0, -0.02, T, 0.08, 1.04);
+    blk(p, doorM, 12.15, 0.02, 0.95, 0.88, 1.95, 0.05);
+    blk(p, mat.brass, 12.9, 0.95, 0.9, 0.05, 0.05, 0.05);
+    blk(p, mat.mat, 11.15, 0.005, 0.12, 0.75, 0.01, 0.76);
+    blk(p, binM, 12.3, 0.08, 1.6, 0.62, 0.92, 0.62);
+    blk(p, binLid, 12.27, 1.0, 1.57, 0.68, 0.07, 0.68);
+    blk(p, binLid, 12.27, 0.97, 1.57, 0.06, 0.06, 0.68);
+    [1.66, 2.1].forEach((z) => cyl(p, mat.blackDeep, 12.38, 0, z, 0.08, 0.08, 0.1));
+  }
+
   // ---------- the empty shop ----------
   const room = new THREE.Group(); scene.add(room);
   for (let i = 0; i < 6; i++) for (let j = 0; j < 5; j++) tile(room, 'wood', 2 * i, 2 * j);
   for (let i = -1; i < 7; i++) tile(room, 'pave', 2 * i, 10.15);
   for (let j = 0; j < 5; j++) tile(room, 'pave', 12.15, 2 * j);
-  ['plain', 'menu', 'menu', 'plain', 'window', 'door'].forEach((t, i) => wallSeg(room, t, 2 * i));
+  ['plain', 'menu', 'menu', 'plain', 'window', 'plain'].forEach((t, i) => wallSeg(room, t, 2 * i));
   const nw = new THREE.Group(); nw.rotation.y = Math.PI / 2; room.add(nw);
   ['plain', 'plain', 'window', 'window', 'plain'].forEach((t, j) => wallSeg(nw, t, -(2 * j + 2)));
   blk(room, mat.plaster, -T, 0, -T, T, H, T);
   for (let i = 0; i < 6; i++) if (i !== 2) lowBrick(room, 2 * i, 10, 2, T);
-  for (let j = 0; j < 5; j++) lowBrick(room, 12, 2 * j, T, 2);
+  for (let j = 0; j < 5; j++) if (j) lowBrick(room, 12, 2 * j, T, 2);
+  lowBrick(room, 12, 1, T, 1);
+  backDoor(room);
   lowBrick(room, 12, 10, T, T);
   blk(room, mat.mat, 4.3, 0, 8.9, 1.4, 0.02, 1);
 
@@ -794,7 +812,7 @@
     while (pile.children.length) pile.remove(pile.children[0]);
     for (let k = 0; k < Math.min(n, 18); k++) {
       const m = sackMesh(), col = k % 3, row = Math.floor(k / 3) % 2, layer = Math.floor(k / 6);
-      m.position.set(6.35 + col * 0.38, layer * 0.25, 10.45 + row * 0.27); m.rotation.y = (k % 2) * 0.12;
+      m.position.set(12.4 + col * 0.38, layer * 0.25, 0.12 + row * 0.27); m.rotation.y = (k % 2) * 0.12;
       pile.add(m);
     }
   }
@@ -1215,13 +1233,13 @@
     if (key === suppliesKey) return; suppliesKey = key;
     const total = shop + (sp.door + stored) * sack, on = sp.auto.qty > 0;
     suppliesEl.innerHTML =
-      '<p class="sup-line' + (total <= sack ? ' low' : '') + '"><b>' + total + '</b> cups of beans · ' + sp.door + ' sack' + (sp.door === 1 ? '' : 's') + ' at the door · ' + (hasStore ? stored + ' in stock · ' : '') + shop + ' in hoppers' +
+      '<p class="sup-line' + (total <= sack ? ' low' : '') + '"><b>' + total + '</b> cups of beans · ' + sp.door + ' sack' + (sp.door === 1 ? '' : 's') + ' at the back door · ' + (hasStore ? stored + ' in stock · ' : '') + shop + ' in hoppers' +
         (sp.onOrder ? ' · <span class="due">' + sp.onOrder + ' due in ' + due + ' min</span>' : '') + '</p>' +
       '<div class="row">' +
         '<button type="button" data-order="1"' + (S.cash < cost ? ' disabled' : '') + '>Order 1 sack · ' + money(cost) + '</button>' +
         '<button type="button" data-order="5"' + (S.cash < cost * 5 ? ' disabled' : '') + '>Order 5 · ' + money(cost * 5) + '</button>' +
         (Sim.needsResearch(S, 'auto') ? '<button type="button" id="autoBtn" disabled title="Research Standing orders first">Standing order · needs research</button>' :
-        '<button type="button" id="autoBtn" aria-pressed="' + on + '" title="Order automatically when beans in the shop, at the door and on order fall below a level">Standing order</button>') +
+        '<button type="button" id="autoBtn" aria-pressed="' + on + '" title="Order automatically when beans in the shop, at the back door and on order fall below a level">Standing order</button>') +
         (on ? '<span class="stepper" aria-label="Sacks per order"><button type="button" data-auto="qty" data-d="-1" aria-label="Fewer sacks">−</button><b>' + sp.auto.qty + '</b> sacks<button type="button" data-auto="qty" data-d="1" aria-label="More sacks">+</button></span>' +
           '<span class="stepper" aria-label="Reorder level">below<button type="button" data-auto="point" data-d="-10" aria-label="Lower level">−</button><b>' + sp.auto.point + '</b><button type="button" data-auto="point" data-d="10" aria-label="Higher level">+</button>cups</span>' : '') +
       '</div>';
@@ -1321,7 +1339,7 @@
     const build = BUILD_TRAYS[tray];
     trayBuild.hidden = !build; menuEl.hidden = tray !== 'menu'; suppliesEl.hidden = tray !== 'beans'; staffEl.hidden = tray !== 'staff';
     document.getElementById('trayTitle').textContent = build ? build[0] : { menu: 'Menu', beans: 'Beans', staff: 'Staff' }[tray];
-    document.getElementById('trayNote').textContent = build ? money(S.cash) + ' to spend · Esc to close' : tray === 'menu' ? 'Click a drink to take it off or put it back' : tray === 'staff' ? 'Pick someone to see what they do' : 'Workers carry sacks from the door to the hoppers';
+    document.getElementById('trayNote').textContent = build ? money(S.cash) + ' to spend · Esc to close' : tray === 'menu' ? 'Click a drink to take it off or put it back' : tray === 'staff' ? 'Pick someone to see what they do' : 'Workers carry sacks in from the back door to the hoppers';
     if (!build) return;
     const types = build[1].filter((t) => { const l = Sim.needsResearch(S, t); return !l || S.research[l].weight > 0 || S.research[l].done > 0; });
     const key = tray + '|' + types.map((t) => (S.cash >= CAT[t].cost ? 1 : 0) + (Sim.needsResearch(S, t) ? 'l' + Math.floor(S.research[Sim.needsResearch(S, t)].done / 10) : '') + (freshItems.has(t) ? 'n' : '')).join() + '|' + (tileFocus || '') + '|' + S.items.length;
@@ -1535,7 +1553,7 @@
     if (it.type === 'till') rows.push('<dt>Queue</dt><dd>' + it.queue.length + ' waiting</dd>', '<dt>Order rail</dt><dd>' + slotsHtml(it.buf.length, it.cap) + '</dd>');
     if (it.type === 'pickup') rows.push('<dt>Ready drinks</dt><dd>' + slotsHtml(it.buf.length, it.cap) + '</dd>');
     const hc = S.R.items[it.type].hopper || 0, kc = S.R.items[it.type].knock || 0, sc = S.R.items[it.type].sacks || 0;
-    if (sc) rows.push('<dt>Sacks on the shelves</dt><dd>' + meterOf(it.sacks, sc, false) + it.sacks + '/' + sc + '</dd>', '<dt>At the door</dt><dd>' + S.supply.door + ' sack' + (S.supply.door === 1 ? '' : 's') + '</dd>');
+    if (sc) rows.push('<dt>Sacks on the shelves</dt><dd>' + meterOf(it.sacks, sc, false) + it.sacks + '/' + sc + '</dd>', '<dt>At the back door</dt><dd>' + S.supply.door + ' sack' + (S.supply.door === 1 ? '' : 's') + '</dd>');
     if (hc) rows.push('<dt>Beans in hopper</dt><dd>' + meterOf(it.beans, hc, it.beans <= hc / 4) + it.beans + '/' + hc + ' cups</dd>');
     if (kc) rows.push('<dt>Grounds bin</dt><dd>' + meterOf(it.grounds, kc, it.grounds >= kc * 0.8) + it.grounds + '/' + kc + '</dd>');
     if (it.chore != null && S.wmap[it.chore]) rows.push('<dt>Chore</dt><dd>' + esc(S.wmap[it.chore].name) + ' is on it</dd>');
@@ -1672,7 +1690,7 @@
   const ACT_NAMES = { till: 'Till', make: 'Making', build: 'Building', chore: 'Chores' };
   const ORDER_STAGES = [['queue', 'Queuing to order', '#3987e5'], ['rail', 'On the rail', '#d95926'], ['making', 'Being made', '#199e70'], ['ready', 'Ready at pickup', '#c98500']];
   const CUM_CURVES = [['cArrived', 'Arrived'], ['cOrdered', 'Ordered'], ['cClaimed', 'Started'], ['cMade', 'Made'], ['cDone', 'Done']];
-  const BEAN_STAGES = [['hoppers', 'In hoppers', '#199e70'], ['store', 'In stock', '#3987e5'], ['door', 'At the door', '#c98500']];
+  const BEAN_STAGES = [['hoppers', 'In hoppers', '#199e70'], ['store', 'In stock', '#3987e5'], ['door', 'At the back door', '#c98500']];
   const BEAN_LINES = [['onOrder', 'On order', '#d95926', true], ['grounds', 'Grounds in bins', '#d55181', false]];
   const RES_STAGES = [['rDone', 'Complete', '#199e70'], ['rActive', 'In progress', '#d95926'], ['rAvailable', 'Not started', '#3987e5']];
   let flowRange = 120, flowMode = 'stock', flowKey = '';

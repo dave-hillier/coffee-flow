@@ -5,7 +5,7 @@
 (function (root) {
   'use strict';
   const GW = 12, GH = 12, IN = 10;          // grid; interior rows z 0..9, z 10 = front wall (gap at x 4,5), z 11 = street
-  const VERSION = 10;                         // bump whenever a change makes old replays play out differently
+  const VERSION = 11;                         // bump whenever a change makes old replays play out differently
   const TPM = 60;
   const NAMES = ['Pip', 'Bo', 'Mo', 'Jun', 'Ada', 'Kit', 'Rue', 'Fen', 'Ola', 'Tam'];
   const STREET = { x: 5, z: 11 };
@@ -19,7 +19,7 @@
     grinder:  { name: 'Grinder',          w: 1, d: 1, ws: 'front', cs: null, blurb: 'Every espresso is ground here first.' },
     espresso: { name: 'Espresso machine', w: 2, d: 1, ws: 'front', cs: null, blurb: 'Pulls espresso. Needs a grinder.' },
     pastry:   { name: 'Cake display',     w: 2, d: 1, ws: 'back',  cs: null, blurb: 'Plates cake to order.' },
-    stock:    { name: 'Stock area',       w: 1, d: 1, ws: 'any',   cs: null, blurb: 'A patch of floor marked out for sacks of beans. Workers stock it from the door and refill hoppers from it.' },
+    stock:    { name: 'Stock area',       w: 1, d: 1, ws: 'any',   cs: null, blurb: 'A patch of floor marked out for sacks of beans. Workers stock it from the back door and refill hoppers from it.' },
     store:    { name: 'Stock cupboard',   w: 1, d: 1, ws: 'front', cs: null, blurb: 'Tidy shelves for sacks of beans. Holds the same as a stock area, but looks the part.' },
     milk:     { name: 'Milk station',     w: 1, d: 1, ws: 'front', cs: null, blurb: 'A milk fridge and steaming jugs. Milk drinks get their milk steamed here after the shot is pulled.' },
     syrup:    { name: 'Syrup station',    w: 1, d: 1, ws: 'front', cs: null, blurb: 'Syrup pumps and whipped cream. Flavoured drinks are finished here on the way to pickup.' }
@@ -93,7 +93,7 @@
     stock: [[0, 0, 0], [1, 0, 0]],
     store: [[0, 0, 0], [1, 0, 0]],
     milk: [[8, 0, 0]],
-    syrup: [[11, 0, 0]]
+    syrup: [[11, 3, 0]]
   };
 
   // The balance. Money in pence, times in game seconds unless named otherwise.
@@ -102,7 +102,7 @@
     startCash: 60000,
     // The starting setup. Equipment listed here starts built, in the standard layout (LAYOUT below).
     start: { workers: 1, demand: 0, sacks: 3, till: 0, pickup: 0, brewer: 0, grinder: 0, espresso: 0, pastry: 0, stock: 0, store: 0, milk: 0, syrup: 0 },
-    // Beans come in sacks, ordered from a supplier and delivered to the door after a lead time.
+    // Beans come in sacks, ordered from a supplier and delivered to the back door after a lead time.
     supply: { sackDoses: 20, sackCost: 600, leadMins: 20 },
     // Research: capacity in units per game minute, split evenly (by weight) across the topics in progress, so three topics
     // each go at a third of the pace. Nothing pays off until a topic is finished: that is the whole cost of splitting.
@@ -119,7 +119,7 @@
       standing: { work: 250 }, roaster: { work: 300, to: 10 }, wholesale: { work: 450, to: 450 },
       music: { work: 250, to: 1700 }, loyalty: { work: 400, to: 0.025 }, press: { work: 600, to: 2.6 },
       fitout: { work: 250, pct: -40 }, shoes: { work: 300, to: 8 }, rota: { work: 350, to: 7 } } },
-    // Worker chores: tipping a sack into a hopper, emptying a knock box, dumping grounds at the door.
+    // Worker chores: tipping a sack into a hopper, emptying a knock box, tipping grounds in the bin by the back door.
     chores: { refill: 15, empty: 20, dump: 10 },
     wagePerMin: 15,           // per worker per game minute (£9/h)
     rentPerMin: 5,            // £3/h
@@ -367,6 +367,7 @@
     for (const c of fp) {
       if (c.x < 0 || c.x >= GW || c.z < 0 || c.z >= IN) return 'Outside the shop';
       if (S.grid[c.z * GW + c.x]) return 'That space is taken';
+      if (same(c, DOOR)) return 'Keep the back door clear';
     }
     for (const o of S.items) for (const a of [SHAPE[o.type].ws === 'any' ? null : o.wc, o.cc]) if (a && fp.some((c) => same(c, a))) return 'Blocks access to ' + label(S, o);
     const any = SHAPE[type].ws === 'any', wc = wcell(it, S.grid), cc = ccell(it);
@@ -379,7 +380,7 @@
     const g = S.grid.slice(); fp.forEach((c) => { g[c.z * GW + c.x] = 1; });
     const seen = flood(g, STREET);
     if (any && !reachable(it, g, seen)) return 'No room for staff to reach it';
-    const need = any ? [] : [wc]; if (cc) need.push(cc);
+    const need = any ? [DOOR] : [DOOR, wc]; if (cc) need.push(cc);
     for (const o of S.items) {
       if (SHAPE[o.type].ws !== 'any') need.push(o.wc);
       else if (!reachable(o, g, seen)) return 'Blocks access to ' + label(S, o);
@@ -472,13 +473,15 @@
   }
 
   // ---------- beans and grounds ----------
-  const DOOR = { x: 5, z: 10 };                       // where sacks are collected and grounds are dumped
+  // the back door, in the side wall at the back corner: sacks are delivered outside it, the bin stands beside it,
+  // and staff stand on this cell to fetch a sack or tip grounds. It stays clear of building.
+  const DOOR = { x: 11, z: 0 };
   const hopperOf = (S, it) => S.R.items[it.type].hopper || 0;
   const knockOf = (S, it) => S.R.items[it.type].knock || 0;
   const beansInShop = (S) => S.items.reduce((n, i) => n + (i.built ? i.beans : 0), 0);          // in hoppers
   const shelfOf = (S, it) => S.R.items[it.type].sacks || 0;                                     // stock areas and cupboards
   const sacksStored = (S) => S.items.reduce((n, i) => n + (i.built ? i.sacks : 0), 0);
-  // where a worker takes a sack from: the nearest stocked store, otherwise the pile at the door
+  // where a worker takes a sack from: the nearest stocked store, otherwise the pile at the back door
   function sackSource(S, w) {
     let best = null, bd = 1e9;
     for (const i of S.items) if (i.built && i.sacks > 0) { const d = dist(w, i.wc); if (d < bd) { bd = d; best = i; } }
@@ -506,19 +509,19 @@
     const src = sackSource(S, w);
     const done = () => { m.chore = null; w.load = null; };
     return mk('refill', [
-      { t: 'go', cell: src === 'door' ? DOOR : () => src.wc, shared: true, status: src === 'door' ? 'Fetching a sack from the door' : 'Fetching a sack from the store' },
+      { t: 'go', cell: src === 'door' ? DOOR : () => src.wc, shared: true, status: src === 'door' ? 'Fetching a sack from the back door' : 'Fetching a sack from the store' },
       { t: 'do', fn: () => { if (!S.imap[m.id] || !takeSack(S, src)) { done(); return 'stop'; } w.load = 'sack'; } },
       { t: 'go', cell: m.wc, shared: true, status: 'Carrying beans to ' + label(S, m) },
       { t: 'work', n: S.R.chores.refill, st: m.id, status: 'Filling the hopper' },
       { t: 'do', fn: () => { if (S.imap[m.id]) m.beans = Math.min(hopperOf(S, m), m.beans + S.R.supply.sackDoses); done(); } }
     ], done);
   }
-  // carry one sack from the door onto a store's shelves
+  // carry one sack from the back door onto a store's shelves
   function stockTask(S, w, st) {
     st.chore = w.id;
     const done = () => { st.chore = null; w.load = null; };
     return mk('stock', [
-      { t: 'go', cell: DOOR, shared: true, status: 'Fetching a sack from the door' },
+      { t: 'go', cell: DOOR, shared: true, status: 'Fetching a sack from the back door' },
       { t: 'do', fn: () => { if (!S.imap[st.id] || S.supply.door <= 0) { done(); return 'stop'; } S.supply.door--; w.load = 'sack'; } },
       { t: 'go', cell: () => st.wc, shared: true, status: 'Carrying beans to the store' },
       { t: 'work', n: S.R.chores.refill, st: st.id, status: 'Stacking the shelf' },
@@ -533,8 +536,8 @@
       { t: 'go', cell: m.wc, status: 'Going to empty the knock box', near: m.id },
       { t: 'work', n: S.R.chores.empty, st: m.id, status: 'Emptying grounds' },
       { t: 'do', fn: () => { n = m.grounds; m.grounds = 0; m.chore = null; w.load = 'grounds'; } },
-      { t: 'go', cell: DOOR, shared: true, status: 'Taking grounds out' },
-      { t: 'work', n: S.R.chores.dump, st: null, status: 'Dumping grounds' },
+      { t: 'go', cell: DOOR, shared: true, status: 'Taking grounds to the bin' },
+      { t: 'work', n: S.R.chores.dump, st: null, status: 'Tipping grounds in the bin' },
       { t: 'do', fn: () => { S.st.groundsOut += n; done(); } }
     ], done);
   }
@@ -1039,7 +1042,7 @@
     while (S.supply.orders.length && S.supply.orders[0].due <= S.t) {
       const o = S.supply.orders.shift();
       S.supply.onOrder -= o.n; S.supply.door += o.n;
-      ev(S, 'Delivery: ' + o.n + ' sack' + (o.n > 1 ? 's' : '') + ' of beans at the door', 'good');
+      ev(S, 'Delivery: ' + o.n + ' sack' + (o.n > 1 ? 's' : '') + ' of beans at the back door', 'good');
       mark(S, 'delivery', o.n + ' sack' + (o.n > 1 ? 's' : '') + ' delivered');
     }
     if (S.t % TPM === 0) {

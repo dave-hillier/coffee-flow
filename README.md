@@ -101,21 +101,24 @@ replays play out.
 
 ## Beans, grounds and flow
 
-- **Beans come in sacks.** You order them (`order n`), and they arrive at the door after `supply.leadMins`.
+- **The back door.** Deliveries and rubbish use the back door, in the side wall at the back corner. Sacks are left
+  on the paving outside it and grounds go in the wheelie bin beside it. Staff stand on the cell just inside to
+  fetch or tip, so nothing can be built there, and building can't cut it off from the rest of the shop.
+- **Beans come in sacks.** You order them (`order n`), and they arrive at the back door after `supply.leadMins`.
   A standing order (`auto point qty`) orders `qty` sacks whenever the beans in the shop, at the door and on
   order fall below `point` cups' worth.
 - **Stock areas and cupboards.** A stock area (`stock`) is a floor tile marked out for `items.stock.sacks` sacks.
   It is free and ready at once, with no crate to build. A stock cupboard (`store`) holds the same number of sacks
   (`items.store.sacks`) and costs money; the difference is only how it looks. Both block walking like any other
-  station. When workers have nothing more pressing, they carry sacks from the door into stock. Hopper refills come
-  from the nearest stocked tile or cupboard, or from the door if there is none. Stock close to the machines
+  station. When workers have nothing more pressing, they carry sacks from the back door into stock. Hopper refills come
+  from the nearest stocked tile or cupboard, or from the back door if there is none. Stock close to the machines
   shortens every refill trip, but stocking it costs worker time, so it only pays when staff have slack. The Flow
-  chart stacks beans by where they are: in hoppers, in stock, at the door. Bots decide whether to mark out a stock
+  chart stacks beans by where they are: in hoppers, in stock, at the back door. Bots decide whether to mark out a stock
   area with the `storeSpare` gene.
 - **Hoppers and knock boxes.** The brewer and grinder have hoppers (`items.*.hopper`). Workers carry a sack in
-  from the door and tip it into a hopper. The brewer and the espresso machine fill knock boxes with grounds
+  from the back door and tip it into a hopper. The brewer and the espresso machine fill knock boxes with grounds
   (`items.*.knock`); when one is full that machine stops until a worker empties it and takes the grounds out
-  to the door.
+  to the bin by the back door.
 - **Chores compete for time.** A worker does a chore first when a machine can't run without it. Otherwise they
   tidy up when they have nothing else to do.
 - **History lives in the sim.** It records one sample per game minute in `S.hist`, keeping 24 hours: customers

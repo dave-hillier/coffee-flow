@@ -183,6 +183,13 @@ test('a flavoured latte follows its recipe: grinder, espresso machine, milk stat
   assert.match(Sim.act(Sim.create(1), 'place', 'syrup', 11, 0, 0), /Needs research: Syrup station/);
 });
 
+test('the back door stays clear: nothing is built on it or walls it off', () => {
+  const S = Sim.create(1);
+  assert.match(Sim.act(S, 'place', 'stock', Sim.DOOR.x, Sim.DOOR.z, 0), /Keep the back door clear/);
+  assert.strictEqual(Sim.act(S, 'place', 'stock', Sim.DOOR.x - 1, Sim.DOOR.z, 0), null);
+  assert.match(Sim.act(S, 'place', 'stock', Sim.DOOR.x, Sim.DOOR.z + 1, 0), /cut off/);
+});
+
 test('cumulative flow lines stay ordered and their gaps equal stock at each stage', () => {
   const S = Sim.create(4, null, { 'start.till': 1, 'start.pickup': 1, 'start.brewer': 1, 'start.workers': 2, 'start.demand': 0.8, 'research.topics.standing.work': 0 });
   Sim.act(S, 'open'); Sim.act(S, 'auto', 40, 3);
