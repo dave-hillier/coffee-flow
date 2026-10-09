@@ -39,15 +39,16 @@ level is open at the start; winning a level unlocks the next. Typing `doppio` on
 
 Every level starts from an empty room and is built up by the player. Each one is ordinary data in `src/levels.js`:
 rule overrides (room size, cash, demand, what can be bought and researched, when the level is lost), a seed, a brief,
-goals met in order and an optional time limit. The sim judges goals and losses, so the headless tools score a level
+and goals met in order. There are no time limits: a level is lost only by going bankrupt or by service so poor
+that trade dries up. The sim judges goals and losses, so the headless tools score a level
 exactly as the game does.
 
 | Level | Room | What it is about |
 |---|---|---|
 | 1 The Kiosk | 6×4 | Tutorial. One worker, filter only, nothing to research. Serve 20. |
-| 2 Morning Rush | 6×6 | More trade than one person can serve; one hire allowed. Serve 60 in 5 hours. |
-| 3 The Corner Café | 8×6 | Research espresso and install it while trading, then serve 120 in 8 hours. |
-| 4 High Street | 10×8 | A full bar with milk and syrups. Keep up 25 served an hour for an hour, within 12 hours. |
+| 2 Morning Rush | 6×6 | More trade than one person can serve; one hire allowed. Serve 60. |
+| 3 The Corner Café | 8×6 | Research espresso and install it while trading, then serve 120. |
+| 4 High Street | 10×8 | A full bar with milk and syrups. Keep up 25 served an hour for a whole hour. |
 | 5 The Flagship | 12×10 | Everything. Grow trade to 25 customers an hour, then run an hour hands-off. |
 
 - **Rooms.** `room.x0`, `room.x1` and `room.z0` mark out the floor inside the 12×10 plot. The room must take in the
@@ -60,7 +61,7 @@ exactly as the game does.
 - **Losing.** Overdrawn for `fail.overdrawnMins` minutes, or more than `fail.overdraft` pence in the red at once, and
   the bank closes the shop. Satisfaction under `fail.sat` for `fail.satMins` minutes, judged once `fail.after`
   customers have finished, and trade dries up. Both timers run back down at the same pace while things are good, so
-  a shop that keeps dipping under the line still loses. Past the time limit with goals unmet, the level is lost too.
+  a shop that keeps dipping under the line still loses.
   The defaults turn every check off, which is free play.
 - **Progress.** Which levels this browser has won, and whether the unlock code was used, is kept in local storage.
 - **Keeping levels winnable.** `test/levels.test.js` plays each level with a reference policy (a preset, or genes and

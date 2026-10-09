@@ -1085,14 +1085,13 @@
   function levelGoalTicket() {
     const g = Sim.goalOf(S); if (!g) return null;
     const p = Sim.goalNow(S, g), n = level.goals.length;
-    const left = level.limitMins ? ' · ' + fmtTime(Math.max(0, level.limitMins * 60 - S.t)) + ' left' : '';
     const body = g.kind === 'served' ? p.v + ' of ' + p.of + ' served'
       : g.kind === 'cash' ? money(p.v) + ' of ' + money(p.of)
       : g.kind === 'rate' ? S.served.length + ' served in the last hour · held for ' + p.v + ' of ' + p.of + ' min'
       : g.kind === 'trade' ? 'Now ' + p.v + ' an hour. Happy customers bring more.'
       : g.kind === 'handsOff' ? p.v + ' of ' + p.of + ' min with no changes. Any change starts the clock again.'
       : '';
-    return { id: 'goal:' + S.goal, sev: 'goal', k: (n > 1 ? 'Goal ' + (S.goal + 1) + ' of ' + n : 'Goal') + left, title: esc(g.title), bar: g.kind === 'menu' ? null : Math.max(0, p.v) / p.of, body };
+    return { id: 'goal:' + S.goal, sev: 'goal', k: (n > 1 ? 'Goal ' + (S.goal + 1) + ' of ' + n : 'Goal'), title: esc(g.title), bar: g.kind === 'menu' ? null : Math.max(0, p.v) / p.of, body };
   }
   function briefTicket() {
     if (!level || dismissed.has('brief') || S.st.served > 0) return null;
@@ -1186,7 +1185,7 @@
     const shown = list.slice(0, 4), more = list.length - shown.length;
     // keyed: a ticket keeps its element while it stays up, so only new ones drop in and the rest don't replay that
     // (moving an element restarts its animation, so stale ones go first and survivors stay put)
-    // a ticket whose kicker counts down carries a steady id, so it updates in place
+    // a ticket can carry a steady id, so it updates in place while its wording changes
     const want = shown.map((t) => [t.id || t.k + '|' + t.title, 'ticket ' + t.sev, ticketHtml(t)]);
     if (more > 0) want.push(['more', 'ticket more', '+' + more + ' more']);
     const keys = new Set(want.map((w) => w[0])), keep = new Map();
@@ -1582,7 +1581,7 @@
   function renderLevels() {
     const won = wonLevels(), next = Levels.LEVELS.find((L) => !won.has(L.id) && isOpen(L, won));
     levelsEl.innerHTML = Levels.LEVELS.map((L, i) => {
-      const open = isOpen(L, won), goals = L.goals.map((g, k) => (k ? g.title[0].toLowerCase() + g.title.slice(1) : g.title)).join(', then ') + (L.limitMins ? ' · within ' + fmtTime(L.limitMins * 60) : '');
+      const open = isOpen(L, won), goals = L.goals.map((g, k) => (k ? g.title[0].toLowerCase() + g.title.slice(1) : g.title)).join(', then ');
       return '<li><button type="button" data-level="' + L.id + '"' + (L === next ? ' class="next"' : '') + (open ? '' : ' disabled') + '>' +
         '<span class="n" aria-hidden="true">' + L.n + '</span><b class="t">' + esc(L.title) + '</b>' + (won.has(L.id) ? '<span class="won">Won</span>' : open ? '<span></span>' : '<span class="lock">Locked</span>') +
         '<span class="g">' + esc(open ? goals : 'Win ' + Levels.LEVELS[i - 1].title + ' to unlock') + '</span></button></li>';
@@ -1623,7 +1622,7 @@
   // ---------- the end of a level: won or lost, how it went, and where next ----------
   const endModal = document.getElementById('endModal'), endBtns = document.getElementById('endBtns');
   let endShown = false;
-  const LOST_TITLE = { bankrupt: 'Bankrupt', service: 'Trade dried up', time: 'Out of time' };
+  const LOST_TITLE = { bankrupt: 'Bankrupt', service: 'Trade dried up' };
   function showEnd() {
     endShown = true; setSpeed(0); closeOverlays(); setMore(false);
     const E = S.end, won = E.won, i = level ? Levels.LEVELS.indexOf(level) : -1, next = won && i >= 0 ? Levels.LEVELS[i + 1] : null;

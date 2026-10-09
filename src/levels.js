@@ -1,5 +1,5 @@
 /* Coffee Flow levels: data only. Each level starts from an empty room and is a set of rule overrides (see
-   DEFAULT_RULES in src/sim.js) plus a seed, a brief, goals met in order and an optional time limit in game minutes.
+   DEFAULT_RULES in src/sim.js) plus a seed, a brief and goals met in order. A level is lost only by going bankrupt or by service so poor that trade dries up.
    The sim judges the goals and the failure rules, so headless runs score a level exactly as the game does. */
 (function (root) {
   'use strict';
@@ -21,13 +21,12 @@
       brief: 'A bigger kiosk by the station exit, with more trade than one person can serve. You can take on a second pair of hands.',
       lesson: 'Specialisation creates queues, and a bigger buffer is not more throughput.',
       rules: {
-        startCash: 50000, 'start.sacks': 3, maxWorkers: 2, 'demand.base': 16,
+        startCash: 50000, 'start.sacks': 3, maxWorkers: 2, 'demand.base': 17,
         'room.x0': 2, 'room.x1': 7, 'room.z0': 4,
         'allow.items': 'till pickup brewer', 'allow.lanes': 'counter',
         'fail.overdraft': 10000, 'fail.overdrawnMins': 30, 'fail.sat': 0.3, 'fail.satMins': 30
       },
-      goals: [{ kind: 'served', n: 60, title: 'Serve 60 customers' }],
-      limitMins: 300
+      goals: [{ kind: 'served', n: 60, title: 'Serve 60 customers' }]
     },
     {
       id: 'corner', n: 3, title: 'The Corner Café', seed: 33,
@@ -39,8 +38,7 @@
         'allow.items': 'till pickup brewer grinder espresso stock store', 'allow.lanes': 'counter bar beans',
         'fail.overdraft': 20000, 'fail.overdrawnMins': 30, 'fail.sat': 0.35, 'fail.satMins': 20
       },
-      goals: [{ kind: 'menu', p: 'espresso', title: 'Put espresso on the menu' }, { kind: 'served', n: 120, title: 'Serve 120 customers' }],
-      limitMins: 480
+      goals: [{ kind: 'menu', p: 'espresso', title: 'Put espresso on the menu' }, { kind: 'served', n: 120, title: 'Serve 120 customers' }]
     },
     {
       id: 'high', n: 4, title: 'High Street', seed: 44,
@@ -52,8 +50,7 @@
         'allow.lanes': 'counter bar drinks menu beans',
         'fail.overdraft': 30000, 'fail.overdrawnMins': 20, 'fail.sat': 0.35, 'fail.satMins': 20
       },
-      goals: [{ kind: 'rate', n: 25, mins: 60, title: 'Keep up 25 served an hour for a whole hour' }],
-      limitMins: 720
+      goals: [{ kind: 'rate', n: 25, mins: 60, title: 'Keep up 25 served an hour for a whole hour' }]
     },
     {
       id: 'flagship', n: 5, title: 'The Flagship', seed: 55,

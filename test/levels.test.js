@@ -101,7 +101,7 @@ test('service is only judged once enough customers have finished', () => {
   assert.strictEqual(S.end, null);
 });
 
-const testLevel = (goals, limitMins) => ({ id: 'test', n: 0, title: 'Test', seed: 1, rules: {}, goals, limitMins });
+const testLevel = (goals) => ({ id: 'test', n: 0, title: 'Test', seed: 1, rules: {}, goals });
 
 test('goals are met in order, then the level is won and the clock stops', () => {
   const L = testLevel([{ kind: 'cash', n: 70000, title: 'Cash' }, { kind: 'menu', p: 'filter', title: 'Filter' }]);
@@ -113,13 +113,6 @@ test('goals are met in order, then the level is won and the clock stops', () => 
   const t = S.t; Sim.step(S);
   assert.strictEqual(S.t, t, 'nothing moves once the game is over');
   assert.match(Sim.act(S, 'open'), /over/);
-});
-
-test('a time limit loses the level when the goals are not met', () => {
-  const S = Sim.create(1, null, {}, testLevel([{ kind: 'served', n: 5, title: 'Serve' }], 30));
-  runMins(S, 40);
-  assert.ok(S.end && S.end.why === 'time');
-  assert.strictEqual(S.end.t, 30 * 60);
 });
 
 test('hands off: the hour starts again after any action', () => {

@@ -437,7 +437,7 @@
     if (!(x0 >= 0 && x0 <= 4 && x1 >= 6 && x1 < GW && z0 >= 0 && z0 <= 7)) throw new Error('The room must cover x 4..6 and rows 7..9 of the plot');
   }
   // A game: seed, the action log to replay, rule overrides, and optionally a level (see src/levels.js). A level brings
-  // its own rules, under any overrides, plus goals to meet and an optional time limit.
+  // its own rules, under any overrides, plus goals to meet.
   function create(seed, log, over, level) {
     const R = rulesWith(Object.assign({}, level ? level.rules : {}, over));
     checkRoom(R);
@@ -1136,7 +1136,6 @@
       ev(S, 'Goal met: ' + g.title, 'good'); mark(S, 'goal', g.title);
       if (!goalOf(S)) return finishGame(S, true, 'goals', 'Every goal met.');
     }
-    if (S.level && S.level.limitMins && S.t >= S.level.limitMins * TPM) finishGame(S, false, 'time', 'Out of time before the goals were met.');
   }
 
   // ---------- research ----------
