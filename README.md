@@ -8,8 +8,8 @@ The design is in [docs/design.md](docs/design.md).
 ## Play
 
 The game is published to GitHub Pages from `main` by the workflow in `.github/workflows/pages.yml`. To play it
-locally, run `npm run build` and open `dist/index.html` in a browser. It needs an internet connection the first
-time, to load three.js and the fonts from their CDNs.
+locally, run `npm install` and `npm run dev`, or `npm run build` and open `dist/index.html` in a browser. The built
+page carries its own code; it needs an internet connection only for the fonts.
 
 Controls:
 
@@ -81,9 +81,16 @@ One-time setup: in the repository's Settings, go to Pages and set Build and depl
 src/sim.js      the simulation: shop, customers, workers, stations, buffers, rules. Pure, deterministic, no DOM.
 src/levels.js   the levels: rule overrides, goals and briefs. Data only.
 src/bot.js      the player model: one policy with tunable genes; Solo / Steady / Rush are presets of it.
-src/ui.js       the browser game (three.js rendering, input, panels). Reads and acts on src/sim.js.
-src/head.html   page markup and styles.
-build.js        bundles src/ into dist/index.html, one self-contained page. --fragment also writes a
+src/app/        the browser game: React and TypeScript. Reads and acts on src/sim.js.
+  engine.ts       loads the three shared files and gives them types.
+  game.ts         the running game: sim state, the frame loop, and every player action.
+  ui.ts           what the player has open and selected: a reducer over past-tense events.
+  GameProvider    holds that state with useReducer; the game loop reads each committed state and dispatches events.
+  scene/          the three.js shop (pinned to r128): models, icons, and the scene drawn into a React-owned canvas.
+  components/     the HUD, trays, panels, charts and modals.
+  styles.css      the page's styles.
+index.html      the page shell Vite builds from.
+build.js        runs Vite to write dist/index.html, one self-contained page. --fragment also writes a
                 version without <html>/<head>/<body> for hosts that add their own.
 headless/       command-line runner and solver. Loads src/sim.js, src/levels.js and src/bot.js unchanged.
 test/           determinism, rules and level tests.
@@ -95,10 +102,13 @@ The browser and Node load the same three files. None of them knows which one it 
 
 ## Commands
 
-Requires Node 18 or later. There are no dependencies to install.
+The headless tools need Node 18 or later and nothing installed. The browser game needs Node 20.19 or later and
+`npm install`.
 
 ```sh
-npm test                                     # replays rebuild exactly; rules round-trip; every level can still be won
+npm test                                     # replays rebuild exactly; rules round-trip; every level can still be won; UI logic
+npm run typecheck                            # type-checks src/app
+npm run dev                                  # the game with live reload
 npm run build                                # writes dist/index.html
 
 node headless/cli.js rules                   # every balance rule and its default

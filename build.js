@@ -6,24 +6,21 @@
 'use strict';
 const fs = require('fs');
 const path = require('path');
-const src = (f) => fs.readFileSync(path.join(__dirname, 'src', f), 'utf8');
-const head = src('head.html');
-const split = head.indexOf('<div class="app">');
-if (split < 0) throw new Error('src/head.html must contain <div class="app">');
-const scripts = '<script>\n' + src('sim.js') + '\n' + src('levels.js') + '\n' + src('bot.js') + '\n</script>\n<script>\n' + src('ui.js') + '\n</script>\n';
 
-const page = '<!doctype html>\n<html lang="en">\n<head>\n<meta charset="utf-8">\n' +
-  '<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">\n' +
-  '<meta name="description" content="A small isometric management game about flow, queues, capacity and finishing work.">\n' +
-  head.slice(0, split) + '</head>\n<body>\n' + head.slice(split) + scripts + '</body>\n</html>\n';
+(async () => {
+  const { build } = await import('vite');
+  await build({ root: __dirname, logLevel: 'warn' });
+  const out = path.join(__dirname, 'dist', 'index.html');
+  const page = fs.readFileSync(out, 'utf8');
+  fs.writeFileSync(path.join(__dirname, 'dist', '.nojekyll'), '');
+  console.log('dist/index.html', (page.length / 1024).toFixed(0) + ' KB');
 
-fs.mkdirSync(path.join(__dirname, 'dist'), { recursive: true });
-fs.writeFileSync(path.join(__dirname, 'dist', 'index.html'), page);
-fs.writeFileSync(path.join(__dirname, 'dist', '.nojekyll'), '');
-console.log('dist/index.html', (page.length / 1024).toFixed(0) + ' KB');
-
-if (process.argv.includes('--fragment')) {
-  fs.mkdirSync(path.join(__dirname, 'fragment'), { recursive: true });
-  fs.writeFileSync(path.join(__dirname, 'fragment', 'coffee-flow.html'), head + scripts);
-  console.log('fragment/coffee-flow.html');
-}
+  if (process.argv.includes('--fragment')) {
+    // the head's title, fonts and inlined code, then the body; the document's own metas stay with the document
+    const head = /<head>([\s\S]*)<\/head>/.exec(page)[1].replace(/<meta[^>]*>\s*/g, '');
+    const body = /<body>([\s\S]*)<\/body>/.exec(page)[1];
+    fs.mkdirSync(path.join(__dirname, 'fragment'), { recursive: true });
+    fs.writeFileSync(path.join(__dirname, 'fragment', 'coffee-flow.html'), head.trim() + '\n' + body.trim() + '\n');
+    console.log('fragment/coffee-flow.html');
+  }
+})().catch((err) => { console.error(err); process.exit(1); });

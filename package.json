@@ -5,12 +5,29 @@
   "description": "An isometric management game about flow, queues and capacity, with a headless runner and solver that share its simulation.",
   "scripts": {
     "build": "node build.js",
-    "test": "node --test test/sim.test.js test/levels.test.js",
+    "test": "node --test test/sim.test.js test/levels.test.js && vitest run",
     "bench": "node headless/cli.js bench",
     "solve": "node headless/cli.js solve",
-    "sweep": "node headless/cli.js sweep"
+    "sweep": "node headless/cli.js sweep",
+    "dev": "vite",
+    "typecheck": "tsc -p ."
   },
   "engines": {
-    "node": ">=18"
+    "node": ">=20.19"
+  },
+  "dependencies": {
+    "react": "^19.3.0",
+    "react-dom": "^19.3.0",
+    "three": "^0.128.0"
+  },
+  "devDependencies": {
+    "@types/react": "^19.3.0",
+    "@types/react-dom": "^19.3.0",
+    "@types/three": "^0.128.0",
+    "@vitejs/plugin-react": "^6.1.2",
+    "typescript": "^7.0.2",
+    "vite": "^8.3.4",
+    "vite-plugin-singlefile": "^2.3.3",
+    "vitest": "^5.0.3"
   }
 }

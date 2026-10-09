@@ -23,7 +23,12 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 22
-      - name: Test the simulation
+          cache: npm
+      - name: Install
+        run: npm ci
+      - name: Type-check the game
+        run: npm run typecheck
+      - name: Test the simulation and the game's UI logic
         run: npm test
       - name: Build the game
         run: npm run build
