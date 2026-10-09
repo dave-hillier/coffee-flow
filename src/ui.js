@@ -1173,7 +1173,7 @@
     return out;
   }
   function researchTicket() {
-    if (!revealed.has('research')) return null;
+    if (tutorialStep()) return null;   // the tutorial's steps come first
     const open = researchable().filter((k) => !S.research[k].complete);
     if (!open.length || open.some((k) => S.research[k].weight > 0)) return null;
     return { sev: 'info', k: 'Research', title: 'Nothing queued', body: 'Pick a topic to work on. It runs in the background.', btn: 'Open research', act: 'research' };
@@ -1242,7 +1242,7 @@
       menu: PKEYS.some((p) => Sim.unlocked(S, p)),
       beans: S.st.beansUsed > 0 || S.st.beansBought > 0,
       staff: S.st.served >= 3 || S.workers.length > 1 || passStages().queue >= 3,
-      research: S.st.served > 0 || Sim.TKEYS.some((k) => rs[k].started >= 0)
+      research: true
     };
     for (const k in now) if (now[k] && !revealed.has(k)) { revealed.add(k); if (S.t > 0) fresh.add(k); }
     for (const k of Sim.TKEYS) if (rs[k].complete && rs[k].finished > 0 && !seenDone.has(k)) { seenDone.add(k); (Sim.TOPICS[k].unlocks || []).forEach((t) => { if (CAT[t]) freshItems.add(t); }); }
@@ -1265,8 +1265,7 @@
   const UNLOCK_WHY = {
     menu: 'Build a filter brewer to put drinks on the menu',
     beans: 'Comes in once the shop starts using beans: build a brewer and open up',
-    staff: 'Comes in once you have served 3 customers or a queue builds',
-    research: 'Comes in once you serve your first customer'
+    staff: 'Comes in once you have served 3 customers or a queue builds'
   };
   const toolLocked = (t) => !revealed.has(t);
   // one floating note for greyed-out buttons: above the dock, below the top bar
