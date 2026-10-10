@@ -33,14 +33,15 @@
     reorderQty:    [1, 10, 'int'],      // ... order this many sacks
     storeSpare:    [0, 30000, 'opt'],   // mark out a stock area once trading and this much cash is spare
     researchSerial:[0, 1, 'bool'],      // research one topic at a time (1) or everything wanted at once (0)
-    standingFirst: [0, 1, 'bool']       // research standing orders before anything else
+    standingFirst: [0, 1, 'bool'],      // research standing orders before anything else
+    barista:       [0, 1, 'bool']       // research the barista course and bar workflow once the rest is done
   };
 
   const PRESETS = {
     solo: {
       name: 'Solo', blurb: 'One worker, filter coffee only. Never hires, never expands.',
       genes: { espressoSpare: NEVER, cakeSpare: NEVER, brewer2Queue: NEVER, espresso2Queue: NEVER, till2Queue: NEVER, spare: 0,
-        hireQueue: NEVER, hireUtil: 0, hireMax: 1, hireGapMin: 30, fireUtil: NEVER, specialise: 0, crew: 1, closeToBuild: 0, dropFilter: 0, reorderPoint: 30, reorderQty: 3, storeSpare: NEVER, researchSerial: 1, standingFirst: 1 }
+        hireQueue: NEVER, hireUtil: 0, hireMax: 1, hireGapMin: 30, fireUtil: NEVER, specialise: 0, crew: 1, closeToBuild: 0, dropFilter: 0, reorderPoint: 30, reorderQty: 3, storeSpare: NEVER, researchSerial: 1, standingFirst: 1, barista: 0 }
     },
     steady: {
       name: 'Steady', blurb: 'Opens cheaply, then adds espresso, staff and cake only when cash and queues justify it.',
@@ -119,7 +120,8 @@
     if (g.espressoSpare !== NEVER) want.push('espresso');
     if (g.cakeSpare !== NEVER) want.push('cake');
     if (!g.standingFirst) want.push('standing');
-    const open = want.filter((k) => S.research[k] && !S.research[k].complete);
+    if (g.barista) want.push('barista1', 'barista2');
+    const open = want.filter((k) => Sim.topicOpen(S, k) && !S.research[k].complete);
     const focus = g.researchSerial ? open.slice(0, 1) : open;
     for (const k of Sim.TKEYS) {
       const r = S.research[k]; if (r.complete) continue;

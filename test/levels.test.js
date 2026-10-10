@@ -9,9 +9,9 @@ const { Sim, Levels, Bot } = require('../headless/load');
 const NEVER = Bot.NEVER;
 const REFERENCE = {
   kiosk: 'steady',
-  rush: 'rush',
+  rush: { genes: Object.assign({}, Bot.PRESETS.rush.genes, { barista: 1 }) },
   corner: { genes: { espressoSpare: 0, cakeSpare: NEVER, hireQueue: 3, hireUtil: 0.6, hireMax: 2, hireGapMin: 60, specialise: 0, spare: 5000, standingFirst: 0,
-    researchSerial: 1, reorderPoint: 50, reorderQty: 4, storeSpare: NEVER, brewer2Queue: NEVER, espresso2Queue: NEVER, till2Queue: NEVER, crew: 1 },
+    researchSerial: 1, reorderPoint: 50, reorderQty: 4, storeSpare: NEVER, brewer2Queue: NEVER, espresso2Queue: NEVER, till2Queue: NEVER, crew: 1, barista: 1 },
     layout: { till: [[4, 8, 0]], pickup: [[6, 8, 0]], brewer: [[2, 6, 0]], grinder: [[3, 6, 0]], espresso: [[7, 6, 0]] } },
   high: { genes: { espressoSpare: 0, cakeSpare: NEVER, hireQueue: 1, hireUtil: 0, hireMax: 4, hireGapMin: 5, specialise: 1, spare: 0, standingFirst: 0, researchSerial: 1,
     reorderPoint: 80, reorderQty: 6, storeSpare: NEVER, brewer2Queue: 3, espresso2Queue: 2, till2Queue: 5, crew: 3, closeToBuild: 1 },
@@ -52,6 +52,12 @@ test('a shop only sells what its level allows, and only researches its lanes', (
   assert.match(Sim.act(S, 'research', 'espresso', 1), /Not for this shop/);
   assert.match(Sim.act(S, 'plan', 'burrs'), /Not for this shop/);
   assert.strictEqual(Sim.act(S, 'research', 'rail1', 1), null);
+});
+
+test('a shop is not offered research for equipment it cannot buy, or anything that grows out of it', () => {
+  const S = Sim.create(1, null, { 'allow.items': 'till pickup brewer', 'allow.lanes': 'bar drinks' });
+  assert.deepStrictEqual(Sim.TKEYS.filter((k) => Sim.topicOpen(S, k)), ['barista1', 'barista2', 'hoppers', 'knock']);
+  assert.match(Sim.act(S, 'research', 'espresso', 1), /Not for this shop/);
 });
 
 // a shop with no money and nothing to sell: wages and rent take it 20p further into the red every minute

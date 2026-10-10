@@ -11,13 +11,13 @@ export const TREE: Record<string, [number, number, string]> = {
   rail1: [0, 0, 'till'], rail2: [0, 0, 'till'], rail3: [0, 0, 'till'], cards: [1, 0, 'till'],
   counter1: [0, 1, 'pickup'], counter2: [0, 1, 'pickup'], counter3: [0, 1, 'pickup'], names: [1, 1, 'cup'],
   espresso: [0, 0, 'espresso'], burrs: [0, 0, 'grinder'], barista1: [1, 0, 'espressoCup'], barista2: [1, 0, 'worker'],
-  hoppers: [0, 1, 'grinder'], knock: [0, 1, 'brewer'],
+  hoppers: [0, 1, 'grinder'], knock: [1, 1, 'brewer'],
   foam: [0, 0, 'milk'], micro: [0, 0, 'cup:cappuccino'], art1: [1, 0, 'cup:latte'], art2: [1, 0, 'cup:latte'], art3: [1, 0, 'cup:latte'],
   syrup1: [2, 0, 'syrup'], syrup2: [2, 0, 'cup:caramel'], syrup3: [2, 0, 'cup:gingerbread'], cream: [3, 0, 'cup:mocha'],
   blend: [0, 0, 'cup'], cake: [0, 1, 'pastry'], bake: [0, 1, 'cake'],
   standing: [0, 0, 'sack'], roaster: [0, 1, 'sack'], wholesale: [0, 1, 'store'],
-  music: [0, 0, 'customer'], loyalty: [0, 0, 'customer'], press: [0, 0, 'research'],
-  shoes: [0, 0, 'worker'], rota: [0, 0, 'worker'], fitout: [0, 1, 'stock']
+  music: [1, 0, 'customer'], loyalty: [0, 0, 'customer'], press: [0, 0, 'research'],
+  shoes: [0, 0, 'worker'], rota: [1, 0, 'worker'], fitout: [0, 1, 'stock']
 };
 // how a rule change reads: what it is, and how to show a value
 const secs = (v: number) => v + 's', mins = (v: number) => v + ' min';
