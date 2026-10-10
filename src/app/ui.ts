@@ -15,7 +15,8 @@ export interface UiState {
   sel: Target | null;
   armed: { act: string; id: number; until: number } | null;
   tray: string | null; lastBuildTray: string; tileFocus: string | null;
-  placing: { type: string; r: number } | null;
+  // what is in hand; on touch, the cell it is aimed at before a second tap places it, and whether to keep placing
+  placing: { type: string; r: number; at?: Cell | null; several?: boolean } | null;
   ctx: ContextMenu | null;
   overlay: Overlay | null;
   flowRange: number; flowMode: FlowMode;
@@ -52,12 +53,15 @@ export const initialUi = (hideDone: boolean): UiState => ({
 export type UiEvent =
   | { type: 'GameStarted' }
   | { type: 'SpeedChanged'; speed: number }
+  | { type: 'SpeedCycled' }
   | { type: 'SplashOpened' }
   | { type: 'SplashClosed'; speed: number }
   | { type: 'TrayPicked'; tray: string | null }
   | { type: 'BuildModeToggled' }
   | { type: 'PlacementStarted'; item: string; r: number }
   | { type: 'PlacementRotated' }
+  | { type: 'PlacementAimed'; cell: Cell | null }
+  | { type: 'SeveralToggled' }
   | { type: 'PlacementEnded' }
   | { type: 'TileFocused'; item: string }
   | { type: 'Selected'; target: Target | null }
@@ -78,6 +82,8 @@ export type UiEvent =
   | { type: 'ModalOpened'; modal: Modal; pasting?: boolean }
   | { type: 'ModalClosed'; resume?: boolean };
 
+// the running speeds the narrow-screen speed button steps through, in order
+export const RUN_SPEEDS = [1, 2, 5, 20];
 const withSpeed = (ui: UiState, speed: number): UiState => ({ ...ui, speed, lastRunSpeed: speed > 0 ? speed : ui.lastRunSpeed });
 
 // picking a tool opens its tray; picking the open one again closes it. Opening any tray closes the overlays.
@@ -94,6 +100,8 @@ export function reduce(ui: UiState, e: UiEvent): UiState {
       return { ...ui, sel: null, armed: null, placing: null, tray: null, tileFocus: null, ctx: null, resSel: null, modal: ui.modal === 'end' ? null : ui.modal };
     case 'SpeedChanged':
       return withSpeed(ui, e.speed);
+    case 'SpeedCycled':
+      return withSpeed(ui, RUN_SPEEDS[(RUN_SPEEDS.indexOf(ui.lastRunSpeed) + 1) % RUN_SPEEDS.length]);
     case 'SplashOpened':
       return { ...ui, splashSpeed: ui.speed || ui.lastRunSpeed, speed: 0, more: false, splash: true, modal: ui.modal === 'end' ? null : ui.modal };
     case 'SplashClosed':
@@ -108,6 +116,10 @@ export function reduce(ui: UiState, e: UiEvent): UiState {
     }
     case 'PlacementRotated':
       return ui.placing ? { ...ui, placing: { ...ui.placing, r: (ui.placing.r + 1) % 4 } } : ui;
+    case 'PlacementAimed':
+      return ui.placing ? { ...ui, placing: { ...ui.placing, at: e.cell } } : ui;
+    case 'SeveralToggled':
+      return ui.placing ? { ...ui, placing: { ...ui.placing, several: !ui.placing.several } } : ui;
     case 'PlacementEnded':
       return { ...ui, placing: null };
     case 'TileFocused':

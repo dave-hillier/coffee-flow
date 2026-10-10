@@ -2,10 +2,11 @@ import { useEffect, useLayoutEffect, useRef, useState, type KeyboardEvent } from
 import { Sim, type Cell } from '../engine';
 import { money, price } from '../format';
 import type { Game } from '../game';
+import { isTouch } from '../touch';
 import { BUILD_TRAYS, inBuildMode } from '../ui';
 import { useGame, useUi } from '../useGame';
 
-// right-click: a menu for whatever is under the cursor
+// right-click, or a long-press: a menu for whatever is under the cursor
 export function ContextMenu() {
   const { ui } = useUi();
   const game = useGame();
@@ -66,7 +67,7 @@ function ItemMenu({ game, id, armed }: { game: Game; id: number; armed: boolean 
       <hr />
       <button type="button" role="menuitem" onClick={() => game.ctxDetails(it.id)}>Details<span></span></button>
       <button type="button" role="menuitem" className="danger" disabled={!!why} title={why || undefined} data-armed={armed ? '' : undefined} onClick={() => game.ctxRemove(it.id)}>
-        {armed ? 'Click again to confirm' : !c.cost ? 'Clear' : it.built ? 'Sell' : 'Cancel order'}
+        {armed ? (isTouch() ? 'Tap' : 'Click') + ' again to confirm' : !c.cost ? 'Clear' : it.built ? 'Sell' : 'Cancel order'}
         <span>{why ? why : refund ? '+' + money(refund) : ''}</span>
       </button>
     </>
@@ -90,7 +91,7 @@ function FloorMenu({ game, cell }: { game: Game; cell: Cell }) {
         );
       })}
       <hr />
-      <button type="button" role="menuitem" onClick={() => game.ctxToggleBuild()}>{inBuildMode(ui) ? 'Leave build mode' : 'Open build menu'}<span>B</span></button>
+      <button type="button" role="menuitem" onClick={() => game.ctxToggleBuild()}>{inBuildMode(ui) ? 'Leave build mode' : 'Open build menu'}<span>{isTouch() ? '' : 'B'}</span></button>
     </>
   );
 }

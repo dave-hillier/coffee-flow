@@ -20,7 +20,7 @@ Each finding has a status. Fixes tick them off.
 
 ### 1. The page is wider than the phone
 
-- **Status:** open
+- **Status:** fixed: at ≤600px the bar stacks money, controls and pass, pause/play plus a speed-stepping button replace the five speed buttons, dock tools shrink and stacked Research scrolls as one; no horizontal overflow on iPhone 13 or Pixel 5
 - **Where:** `src/app/styles.css` (`.bar`, `.controls`, the
   `max-width: 1100px` rule), `src/app/components/TopBar.tsx`
 - **Seen:** on a 390px iPhone the document is 448px wide. `.controls`
@@ -40,7 +40,7 @@ Each finding has a status. Fixes tick them off.
 
 ### 2. Rotate, cancel and multi-place need a keyboard or a mouse
 
-- **Status:** open
+- **Status:** fixed: while placing, the status box has Rotate, Several (keep placing), Cancel (back to the tray) and Done (leave build mode); a still finger held 500ms opens the item or floor menu, and neither a moving finger nor a second finger counts as a tap, nor does the release after a menu opens (while placing, a long-press opens nothing and the release aims as a tap)
 - **Where:** `src/app/game.ts` (`pointerUp`, `click`, `contextClick`,
   `keydown`), `src/app/components/Stage.tsx`
 
@@ -58,7 +58,7 @@ Each finding has a status. Fixes tick them off.
 
 ### 3. No preview of where an item will land
 
-- **Status:** open
+- **Status:** fixed: on a touch pointer the first tap aims (`PlacementAimed`): the ghost and its tip or warning stay on that cell; a second tap on it, or ✓ Place, places
 - **Where:** `src/app/game.ts` (`hoverTick`, `pointerLeave`)
 - **Seen:** `hoverTick` needs `this.pointer`. On touch, `pointerleave`
   fires straight after `pointerup` and clears it, and while a finger is
@@ -70,7 +70,7 @@ Each finding has a status. Fixes tick them off.
 
 ### 4. Landscape does not fit
 
-- **Status:** open
+- **Status:** fixed: under `max-height: 500px` the stage loses its `min-height`, the bar is one slim row with the pass in the middle, the dock and tray tiles are slimmer, the tray is capped at 75% of the stage with its facts in two columns so it needs no inner scroll, and the ⋯ menu is capped at the viewport and scrolls inside itself; iPhone 13 landscape no longer scrolls, ⋯ menu open included
 - **Where:** `src/app/styles.css` (`.stage { min-height: 320px }`, bar,
   dock, tray)
 - **Seen:** 320px stage + 60px bar + 88px dock = 468px on a 342px-tall
@@ -83,7 +83,7 @@ Each finding has a status. Fixes tick them off.
 
 ### 5. No safe-area handling
 
-- **Status:** open
+- **Status:** fixed: `.bar`, `.dock` and the splash are padded by `env(safe-area-inset-*)`, and the floating stage overlays keep clear of the left and right insets
 - **Where:** `index.html` sets `viewport-fit=cover`; no CSS uses
   `env(safe-area-inset-*)`.
 - **Seen:** in landscape the cash is clipped by the notch; the dock sits
@@ -93,7 +93,7 @@ Each finding has a status. Fixes tick them off.
 
 ### 6. Information that only appears on hover
 
-- **Status:** open
+- **Status:** fixed: on touch, tapping a locked tool or Open shop shows its reason until the next touch or for 4 seconds, the Flow and Playtest chart tips follow a tap or sideways drag, and the ⋯ menu lists custom rules; canvas hover tips stay mouse-only, as a tap acts at once and the ticker reports it
 - **Where:** `game.ts` `hoverTick` (canvas tips), `components/WhyTip.tsx`
   (why a tool is locked), `title=` attributes throughout, the Flow chart
   crosshair (`components/Flow.tsx`), the scenario rules on the ⋯ heading
@@ -105,7 +105,7 @@ Each finding has a status. Fixes tick them off.
 
 ### 7. Tap targets are too small
 
-- **Status:** open
+- **Status:** fixed: under `@media (pointer: coarse)` buttons are at least 44px tall, and small ones 44px wide; the Playtest 'Include' labels are 44px tall with a 22px box; nothing visible under 44×44 on iPhone 13, iPhone 13 landscape or Pixel 5
 - **Seen:** speed buttons 40×36, ⋯ 36×36, menu chips and Research/Flow
   header buttons 30 tall, context-menu rows 30, steppers 28×28, ticket
   buttons 26, `ol.builds` buttons 24. Guidance is 44pt (Apple) / 48dp
@@ -115,7 +115,7 @@ Each finding has a status. Fixes tick them off.
 
 ### 8. On-screen text still describes desktop controls
 
-- **Status:** open
+- **Status:** fixed: `isTouch()` in `src/app/touch.ts` picks tap, long-press, pinch and on-screen-button wording, and shortcut keys are hidden; desktop copy unchanged (the camera hint stays hidden at ≤760px as before, and must follow #9 if the gestures change)
 - **Seen:** "Esc to close", "Click to place · R rotates · Shift-click for
   several", "Drag to orbit · right-drag to pan · scroll to zoom · Space
   pauses", "right-click" in the placing tip.
@@ -126,7 +126,7 @@ Each finding has a status. Fixes tick them off.
 
 ### 9. Camera gestures
 
-- **Status:** open
+- **Status:** fixed: one finger pans, two fingers dolly+rotate (`controls.touches`), mouse unchanged; the touch hint says so
 - **Where:** `src/app/scene/shop.ts` (`OrbitControls`)
 - **Seen:** touch defaults are kept: one finger orbits, two fingers zoom
   and pan. For an isometric management game one-finger pan is expected,
@@ -136,14 +136,14 @@ Each finding has a status. Fixes tick them off.
 
 ### 10. Replay textarea zooms the page
 
-- **Status:** open
+- **Status:** fixed: 16px under `@media (pointer: coarse)`
 - **Seen:** its font is 12px (`.sheet textarea`); iOS zooms in on inputs
   under 16px when focused.
 - **Fix:** 16px on coarse pointers.
 
 ### 11. Battery
 
-- **Status:** open
+- **Status:** fixed: paused and idle for 600ms (no input, camera `change`, UI or sim change), `Game.frame` skips sync, render and the per-frame notify bar one frame a second (paused frame notifies 25–40/s to 1/s); the 5/s HUD tick still re-renders the HUD
 - **Seen:** the scene renders every frame, and `frameListeners` re-render
   React (`Labels` and others) every frame, even while paused with nothing
   moving.
@@ -152,7 +152,7 @@ Each finding has a status. Fixes tick them off.
 
 ### 12. Viewport height, long-press callouts, dock labels
 
-- **Status:** open
+- **Status:** fixed: `#root` is `100dvh`; the stage and dock have `-webkit-touch-callout: none` and `user-select: none` (text fields excepted); dock labels fit and, when the tools still overflow, the edge they run off fades to show the row scrolls
 - **Seen:**
   - `html, body, #root { height: 100% }`; `100dvh` behaves better as the
     mobile address bar shows and hides.

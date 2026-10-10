@@ -12,7 +12,7 @@ const SPEED_BUTTONS: [number, string, string][] = [
 
 // the top bar: money on the left, the pass in the middle, time on the right
 export function TopBar() {
-  const { ui } = useUi();
+  const { ui, dispatch } = useUi();
   const game = useGame();
   const { handlers, tip } = useWhyTip();
   const S = game.S, st = S.st;
@@ -38,18 +38,23 @@ export function TopBar() {
       {trading && <Pass />}
       <div className="controls">
         <button id="openBtn" type="button" aria-describedby="openWhy" data-label={label} className={openCls}
-          aria-disabled={why ? 'true' : undefined}
+          aria-disabled={why ? 'true' : undefined} {...handlers}
           title={why ? undefined : S.open ? 'Click to close: no new customers will arrive' : 'Let customers in'}
-          onClick={() => { if (!why) game.act('open'); }} {...handlers}>
+          onClick={(e) => { if (why) handlers.onClick(e); else game.act('open'); }}>
           <span data-for="shut">Open shop</span><span data-for="open">Open</span><span data-for="closed">Closed</span>
         </button>
         <span className="why" id="openWhy">{why || ''}</span>
         {tip}
         <span className="clock" title="Time trading">{fmtTime(S.t)}</span>
-        <div className="seg" role="group" aria-label="Game speed">
+        <div className="seg speed-all" role="group" aria-label="Game speed">
           {SPEED_BUTTONS.map(([s, text, title]) => (
             <button key={s} type="button" aria-pressed={ui.speed === s} title={title} aria-label={s === 0 ? 'Pause' : undefined} onClick={() => game.setSpeed(s)}>{text}</button>
           ))}
+        </div>
+        {/* on a narrow or short screen, in place of the five: pause/play and a button that steps through the speeds */}
+        <div className="seg speed-mini" role="group" aria-label="Game speed">
+          <button type="button" aria-label={ui.speed ? 'Pause' : 'Play'} title={ui.speed ? 'Pause (Space)' : 'Play (Space)'} onClick={() => game.togglePause()}>{ui.speed ? '❚❚' : '▶'}</button>
+          <button type="button" aria-label={'Speed ' + ui.lastRunSpeed + '×, change speed'} title="Next speed: 1×, 2×, 5×, 20× (keys 2 to 5 pick one)" onClick={() => dispatch({ type: 'SpeedCycled' })}>{ui.lastRunSpeed}×</button>
         </div>
         <MoreMenu />
       </div>

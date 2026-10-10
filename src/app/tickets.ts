@@ -3,6 +3,7 @@
 import { Sim, type GameState, type Level } from './engine';
 import { money } from './format';
 import { researchable, sumCups, unassigned } from './derive';
+import { isTouch } from './touch';
 import { trayOf } from './ui';
 
 export type Severity = 'step' | 'crit' | 'warn' | 'good' | 'info' | 'goal';
@@ -27,7 +28,7 @@ export function tutorialStep(S: GameState, level: Level | null): Ticket | null {
   }
   if (!(has(S, 'till', true) && has(S, 'pickup', true) && sellable(true))) {
     const n = unassigned(S).length;
-    return { sev: 'step', k: 'Step 2 of 4', title: 'Build the crates', body: n ? 'Right-click a crate and pick ' + who + ', or hand them all over.' : who + ' is on it. Speed up time while you wait.', btn: n ? 'Give all to ' + who : '', act: 'assignAll' };
+    return { sev: 'step', k: 'Step 2 of 4', title: 'Build the crates', body: n ? (isTouch() ? 'Long-press' : 'Right-click') + ' a crate and pick ' + who + ', or hand them all over.' : who + ' is on it. Speed up time while you wait.', btn: n ? 'Give all to ' + who : '', act: 'assignAll' };
   }
   if (!S.open && !S.st.arrived) return { sev: 'step', k: 'Step 3 of 4', title: 'Open the shop', body: 'Customers start arriving once you open.', btn: 'Open shop', act: 'open' };
   return { sev: 'step', k: 'Step 4 of 4', title: 'Serve a customer', body: 'They order at the till, ' + who + ' brews, and they collect at pickup.' };
