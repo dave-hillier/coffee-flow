@@ -45,9 +45,9 @@ exactly as the game does.
 
 | Level | Room | What it is about |
 |---|---|---|
-| 1 The Kiosk | 6×4 | Tutorial. One worker, filter only, nothing to research. Serve 20. |
-| 2 Morning Rush | 6×6 | More trade than one person can serve; one hire allowed. Serve 60. |
-| 3 The Corner Café | 8×6 | Research espresso and install it while trading, then serve 120. |
+| 1 The Kiosk | 6×4 | Tutorial. One worker, filter only, nothing to research. Keep up 10 served an hour for half an hour. |
+| 2 Morning Rush | 6×6 | More trade than one person can serve; one hire allowed, and the barista course to research. Keep up 20 an hour for half an hour. |
+| 3 The Corner Café | 8×6 | Research espresso and install it while trading, then keep up 22 an hour for half an hour. |
 | 4 High Street | 10×8 | A full bar with milk and syrups. Keep up 25 served an hour for a whole hour. |
 | 5 The Flagship | 12×10 | Everything. Grow trade to 25 customers an hour, then run an hour hands-off. |
 
@@ -195,7 +195,12 @@ replays play out.
 
 - **The tree.** Topics sit in seven lanes: front counter, bar, drinks, menu, beans, customers and team. A topic's
   `needs` lists the topics that must finish first, and can reach into another lane (the drinks lane grows out of
-  Espresso training).
+  Espresso training). `needs` is kept for real dependencies, mostly tiers of the same thing, so the barista course,
+  card readers and names on cups each stand alone.
+- **What a shop is offered.** A topic shows only if its lane is in `allow.lanes`, it unlocks equipment in
+  `allow.items` (when it unlocks any), and every topic it needs shows too. A filter-only kiosk with the bar lane
+  open gets the barista course and bigger hoppers, not espresso training. The front counter lane (bigger order
+  rails and pickup counters) is end-game polish: only the Flagship and free play open it.
 - **Unlocks.** Espresso training unlocks the grinder and espresso machine. Cake supplier unlocks the cake display.
   In the drinks lane, Steamed milk unlocks the milk station and lattes, Microfoam adds cappuccinos, Syrup station
   unlocks the syrup station and vanilla lattes, then Caramel syrup, Seasonal syrups (gingerbread) and Whipped cream

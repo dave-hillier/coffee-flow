@@ -47,17 +47,17 @@
     rail1:     { lane: 'counter', name: 'Order rail: 8 cups',   sets: ['items.till.slots'], blurb: 'Each till\'s rail holds 8 waiting orders, so the till keeps taking orders through a rush.' },
     rail2:     { lane: 'counter', name: 'Order rail: 12 cups',  sets: ['items.till.slots'], needs: ['rail1'], blurb: 'Each till\'s rail holds 12 waiting orders.' },
     rail3:     { lane: 'counter', name: 'Order rail: 16 cups',  sets: ['items.till.slots'], needs: ['rail2'], blurb: 'Each till\'s rail holds 16 waiting orders.' },
-    cards:     { lane: 'counter', name: 'Card readers',         sets: ['orderTime'], needs: ['rail1'], blurb: 'Paying by card is quicker, so each order takes less time at the till.' },
+    cards:     { lane: 'counter', name: 'Card readers',         sets: ['orderTime'], blurb: 'Paying by card is quicker, so each order takes less time at the till.' },
     counter1:  { lane: 'counter', name: 'Pickup counter: 8 cups',  sets: ['items.pickup.slots'], blurb: 'Each pickup counter holds 8 finished drinks, so staff put drinks down and move on.' },
     counter2:  { lane: 'counter', name: 'Pickup counter: 12 cups', sets: ['items.pickup.slots'], needs: ['counter1'], blurb: 'Each pickup counter holds 12 finished drinks.' },
     counter3:  { lane: 'counter', name: 'Pickup counter: 16 cups', sets: ['items.pickup.slots'], needs: ['counter2'], blurb: 'Each pickup counter holds 16 finished drinks.' },
-    names:     { lane: 'counter', name: 'Names on cups',        sets: ['collectTime'], needs: ['counter1'], blurb: 'Customers spot their drink at once and leave the counter sooner.' },
+    names:     { lane: 'counter', name: 'Names on cups',        sets: ['collectTime'], blurb: 'Customers spot their drink at once and leave the counter sooner.' },
     espresso:  { lane: 'bar', name: 'Espresso training',     unlocks: ['grinder', 'espresso'], blurb: 'Lets you buy a grinder and espresso machine.' },
     burrs:     { lane: 'bar', name: 'Sharper burrs',         sets: ['products.espresso.grind'], needs: ['espresso'], blurb: 'Grinders get through a dose in half the time.' },
-    barista1:  { lane: 'bar', name: 'Barista course',        sets: MAKES, needs: ['espresso'], blurb: 'Staff make every drink and plate faster.' },
+    barista1:  { lane: 'bar', name: 'Barista course',        sets: MAKES, blurb: 'Staff make every drink and plate faster.' },
     barista2:  { lane: 'bar', name: 'Bar workflow',          sets: MAKES, needs: ['barista1'], blurb: 'A tidier bar: everything is made faster again.' },
     hoppers:   { lane: 'bar', name: 'Bigger hoppers',        sets: ['items.brewer.hopper', 'items.grinder.hopper'], blurb: 'Brewers and grinders hold twice the beans, so refills come half as often.' },
-    knock:     { lane: 'bar', name: 'Deeper knock boxes',    sets: ['items.brewer.knock', 'items.espresso.knock'], needs: ['hoppers'], blurb: 'Knock boxes hold twice the grounds, so they need emptying half as often.' },
+    knock:     { lane: 'bar', name: 'Deeper knock boxes',    sets: ['items.brewer.knock', 'items.espresso.knock'], blurb: 'Knock boxes hold twice the grounds, so they need emptying half as often.' },
     foam:      { lane: 'drinks', name: 'Steamed milk',       unlocks: ['milk', 'latte'], needs: ['espresso'], blurb: 'Lets you buy a milk station and put lattes on the menu.' },
     micro:     { lane: 'drinks', name: 'Microfoam',          unlocks: ['cappuccino'], needs: ['foam'], blurb: 'Silky foam for cappuccinos.' },
     art1:      { lane: 'drinks', name: 'Latte art: hearts',   sets: MILKY_PRICES, needs: ['foam'], blurb: 'A heart on top: milk drinks sell for more.' },
@@ -74,11 +74,11 @@
     roaster:   { lane: 'beans', name: 'Local roaster',       sets: ['supply.leadMins'], blurb: 'A roaster round the corner: deliveries arrive sooner.' },
     wholesale: { lane: 'beans', name: 'Wholesale account',   sets: ['supply.sackCost'], needs: ['roaster'], blurb: 'Sacks of beans cost less.' },
     music:     { lane: 'guests', name: 'Queue music',        sets: ['patience.min'], blurb: 'Customers wait longer before they give up.' },
-    loyalty:   { lane: 'guests', name: 'Loyalty cards',      sets: ['demand.gain'], needs: ['music'], blurb: 'Happy customers bring trade back faster.' },
+    loyalty:   { lane: 'guests', name: 'Loyalty cards',      sets: ['demand.gain'], blurb: 'Happy customers bring trade back faster.' },
     press:     { lane: 'guests', name: 'Local press',        sets: ['demand.max'], needs: ['loyalty'], blurb: 'A write-up in the paper: the shop can grow busier than before.' },
     fitout:    { lane: 'team', name: 'Flat-pack fit-out',    sets: ['items.till.buildMins', 'items.pickup.buildMins', 'items.brewer.buildMins', 'items.grinder.buildMins', 'items.espresso.buildMins', 'items.pastry.buildMins', 'items.store.buildMins'], blurb: 'New equipment goes up faster.' },
     shoes:     { lane: 'team', name: 'Comfy shoes',          sets: ['walkStep'], blurb: 'Staff walk faster.' },
-    rota:      { lane: 'team', name: 'Rota planning',        sets: ['maxWorkers'], needs: ['shoes'], blurb: 'Room on the rota for more staff.' }
+    rota:      { lane: 'team', name: 'Rota planning',        sets: ['maxWorkers'], blurb: 'Room on the rota for more staff.' }
   };
   const prereqs = (k) => TOPICS[k].needs || [];
   const TKEYS = Object.keys(TOPICS);
@@ -423,7 +423,12 @@
 
   // ---------- creation ----------
   const allowed = (S, type) => S.R.allow.items.split(' ').includes(type);
-  const topicOpen = (S, k) => S.R.allow.lanes.split(' ').includes(TOPICS[k].lane);
+  // a topic this shop can research: its lane is open, it unlocks equipment the shop may buy (if it unlocks any), and
+  // everything it needs is open too, so a filter-only kiosk is not offered espresso training
+  function topicOpen(S, k) {
+    const T = TOPICS[k], kit = (T.unlocks || []).filter((t) => SHAPE[t]);
+    return S.R.allow.lanes.split(' ').includes(T.lane) && (!kit.length || kit.some((t) => allowed(S, t))) && prereqs(k).every((p) => topicOpen(S, p));
+  }
   function ev(S, text, kind) { S.events.push({ n: ++S.evn, t: S.t, text, kind: kind || 'info' }); if (S.events.length > 40) S.events.shift(); }
   function addWorker(S, x, z) {
     const id = S.nextId++;
