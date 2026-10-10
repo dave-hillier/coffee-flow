@@ -2,8 +2,9 @@ import { type ReactNode } from 'react';
 import { Sim, type Item, type Worker } from '../engine';
 import { money } from '../format';
 import type { Game } from '../game';
-import { useGame, useUi } from '../useGame';
+import { isTouch } from '../touch';
 import { isArmed } from '../ui';
+import { useGame, useUi } from '../useGame';
 
 const Meter = ({ u }: { u: number }) => <><span className={'meter' + (u > 0.85 ? ' hot' : '')}><s style={{ width: Math.round(u * 100) + '%' }}></s></span>{Math.round(u * 100)}%</>;
 const MeterOf = ({ n, cap, hot }: { n: number; cap: number; hot: boolean }) => <span className={'meter' + (hot ? ' hot' : '')}><s style={{ width: Math.round(100 * n / Math.max(1, cap)) + '%' }}></s></span>;
@@ -41,7 +42,7 @@ function WorkerPanel({ game, w }: { game: Game; w: Worker }) {
             <button type="button" aria-pressed={w.all} onClick={() => game.panelAct('all', w.id, 0)}>All stations</button>
             {built.map((i) => <button key={i.id} type="button" aria-pressed={!w.all && w.patch.includes(i.id)} onClick={() => game.panelAct('patch', w.id, i.id)}>{Sim.label(S, i)}</button>)}
           </div>
-          <p className="help">Or click stations in the shop. {w.name} finishes drinks before taking new orders.</p>
+          <p className="help">Or {isTouch() ? 'tap' : 'click'} stations in the shop. {w.name} finishes drinks before taking new orders.</p>
         </> : <p className="help">Nothing built yet.</p>}
       </div>
       <div className="sec">
@@ -57,7 +58,7 @@ function WorkerPanel({ game, w }: { game: Game; w: Worker }) {
       </div>
       {S.workers.length > 1 && !w.leaving && (
         <div className="row">
-          <button type="button" className="danger" data-armed={armed ? '' : undefined} onClick={() => game.panelAct('fire', w.id, 0)}>{armed ? 'Click again to let ' + w.name + ' go' : 'Let ' + w.name + ' go'}</button>
+          <button type="button" className="danger" data-armed={armed ? '' : undefined} onClick={() => game.panelAct('fire', w.id, 0)}>{armed ? (isTouch() ? 'Tap' : 'Click') + ' again to let ' + w.name + ' go' : 'Let ' + w.name + ' go'}</button>
         </div>
       )}
     </>
@@ -72,7 +73,7 @@ function ItemPanel({ game, it }: { game: Game; it: Item }) {
   const removeBtn = (
     <div className="row">
       <button type="button" className="danger" disabled={!!why} title={why || undefined} data-armed={armed ? '' : undefined} onClick={() => game.panelAct('remove', 0, it.id)}>
-        {armed ? 'Click again to confirm' : !c.cost ? 'Clear ' + name.toLowerCase() : (it.built ? 'Sell for ' : 'Cancel order, refund ') + money(refund)}
+        {armed ? (isTouch() ? 'Tap' : 'Click') + ' again to confirm' : !c.cost ? 'Clear ' + name.toLowerCase() : (it.built ? 'Sell for ' : 'Cancel order, refund ') + money(refund)}
       </button>
       {why && <span className="help">{why}</span>}
     </div>
@@ -110,7 +111,7 @@ function ItemPanel({ game, it }: { game: Game; it: Item }) {
         {makes.length > 0 && <><dt>Makes</dt><dd>{makes.map((p) => PROD[p].name).join(', ')}</dd></>}
         <dt>Staffed by</dt><dd>{crew.length ? crew.map((w) => w.name).join(', ') : 'nobody'}</dd>
       </dl>
-      {!crew.length && <p className="help">Select a worker, then click this station to staff it.</p>}
+      {!crew.length && <p className="help">Select a worker, then {isTouch() ? 'tap' : 'click'} this station to staff it.</p>}
       {removeBtn}
     </>
   );

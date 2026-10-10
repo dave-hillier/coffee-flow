@@ -1,12 +1,13 @@
 // The running game: the sim state, the frame loop, and the player's actions on it. React components read from it and
 // call its methods; it tells them when to look again (subscribe for the HUD, subscribeFrame for things that move).
-import { Bot, Levels, Sim, type BotPlayer, type GameState, type Level } from './engine';
+import { Bot, Levels, Sim, type BotPlayer, type Cell, type GameState, type Level } from './engine';
 import { centreOf, patchText, researchable, unassigned } from './derive';
 import { renderIcons, type Icons } from './scene/icons';
 import { ShopScene } from './scene/shop';
 import { goalTitle, newlyMetGoals, tutorialStep, type Ticket } from './tickets';
 import { BUILD_TRAYS, inBuildMode, initialUi, isArmed, isBuildTray, type ContextMenu, type Target, type UiEvent, type UiState } from './ui';
 import { price } from './format';
+import { isTouch } from './touch';
 
 export const SEED = 1;
 const TPS = 30;                     // ticks per real second at 1×
@@ -15,6 +16,10 @@ const CHEAT = 'doppio';
 
 export interface Note { id: number; text: string; kind: string; at: number; n: number }
 export interface HoverTip { text: string; bad: boolean; x: number; y: number }
+type Press = { clientX: number; clientY: number; pointerId?: number; pointerType?: string };
+const LONG_PRESS = 500;             // ms a still finger takes to open a context menu
+const SETTLE = 600;                 // ms paused frames keep drawing after anything changes, so poses and camera come to rest
+const IDLE_FRAME = 1000;            // ms between frames drawn anyway while paused and idle
 
 const store = {
   get(key: string) { try { return localStorage.getItem(key); } catch (e) { return null; } },
@@ -60,6 +65,8 @@ export class Game {
   private hoverCell: { x: number; z: number } | null = null;
   private pointer: { x: number; y: number } | null = null;
   private down: { x: number; y: number; b: number } | null = null;
+  private readonly touches = new Set<number>();
+  private press = 0;
   tip: HoverTip | null = null;
   cursor = 'grab';
 
@@ -71,6 +78,9 @@ export class Game {
   private last = 0;
   private hudAt = 0;
   private acc = 0;
+  private woke = 0;
+  private drawn = 0;
+  private shownUi: UiState | null = null;
 
   constructor() {
     this.newGame(SEED);
@@ -81,7 +91,9 @@ export class Game {
   subscribeFrame = (fn: () => void) => { this.frameListeners.add(fn); return () => { this.frameListeners.delete(fn); }; };
   getVersion = () => this.version;
   getFrameVersion = () => this.frameVersion;
-  private changed() { this.version++; this.listeners.forEach((fn) => fn()); }
+  private changed(wake = true) { if (wake) this.wake(); this.version++; this.listeners.forEach((fn) => fn()); }
+  // something on screen may differ: draw frames again even while paused
+  private wake = () => { this.woke = performance.now(); };
 
   connect(ui: UiState, dispatch: (e: UiEvent) => void) { this.ui = ui; this.send = dispatch; }
   dispatch(e: UiEvent) { this.send(e); }
@@ -96,6 +108,7 @@ export class Game {
     this.watching = !!(log && log.length); this.bot = null; this.endShown = false;
     this.hover = null; this.tip = null;
     if (this.scene) this.scene.buildRoom(this.S);
+    this.wake();
     this.dispatch({ type: 'GameStarted' });
     this.hudTick();
   }
@@ -126,7 +139,7 @@ export class Game {
   // ---------- the canvas ----------
   attach(canvas: HTMLCanvasElement, stage: HTMLElement) {
     this.stageEl = stage;
-    try { this.scene = new ShopScene(canvas); }
+    try { this.scene = new ShopScene(canvas); this.scene.onMove = this.wake; }
     catch (e) { this.sceneError = 'This browser could not start WebGL, so the shop cannot be shown.'; this.changed(); return () => { this.stageEl = null; }; }
     if (!Object.keys(this.icons).length) this.icons = renderIcons();
     this.scene.buildRoom(this.S);
@@ -142,8 +155,8 @@ export class Game {
       this.scene = null; this.stageEl = null;
     };
   }
-  resize() { if (this.scene && this.stageEl) this.scene.resize(this.stageEl.clientWidth, this.stageEl.clientHeight, this.ui.pixel); }
-  resetView() { if (this.scene) this.scene.resetView(); }
+  resize() { this.wake(); if (this.scene && this.stageEl) this.scene.resize(this.stageEl.clientWidth, this.stageEl.clientHeight, this.ui.pixel); }
+  resetView() { this.wake(); if (this.scene) this.scene.resetView(); }
 
   private frame = (now: number) => {
     const dt = Math.min(0.1, (now - this.last) / 1000); this.last = now;
@@ -159,11 +172,16 @@ export class Game {
     if (S.end && !this.endShown) this.showEnd();
     // events from the sim
     for (const e of S.events) if (e.n > this.seenEvent) { this.seenEvent = e.n; this.note(e.text, e.kind); }
-    const scene = this.scene!;
-    scene.sync(S, { sel: this.ui.sel, hover: this.hover, buildMode: this.buildMode, speed }, frac, dt);
-    this.hoverTick();
-    scene.render();
-    this.frameVersion++; this.frameListeners.forEach((fn) => fn());
+    if (this.ui !== this.shownUi) { this.shownUi = this.ui; this.wake(); }
+    // paused with nothing moving and nothing touched: leave the last frame up and skip the per-frame updates
+    if (speed > 0 || now - this.woke < SETTLE || now - this.drawn > IDLE_FRAME) {
+      this.drawn = now;
+      const scene = this.scene!;
+      scene.sync(S, { sel: this.ui.sel, hover: this.hover, buildMode: this.buildMode, speed }, frac, dt);
+      this.hoverTick();
+      scene.render();
+      this.frameVersion++; this.frameListeners.forEach((fn) => fn());
+    }
     if (now - this.hudAt > 200) { this.hudAt = now; this.hudTick(); }
     this.raf = requestAnimationFrame(this.frame);
   };
@@ -185,33 +203,61 @@ export class Game {
     if (sel && !(sel.kind === 'worker' ? S.wmap[sel.id] : S.imap[sel.id])) this.dispatch({ type: 'Selected', target: null });
     const t = performance.now();
     if (this.ticker.length && t - this.ticker[0].at > 7000) this.ticker = this.ticker.slice(1);
-    this.changed();
+    this.changed(false);
   }
 
   // ---------- pointer on the shop ----------
-  pointerDown(e: { clientX: number; clientY: number; button: number }) { this.down = { x: e.clientX, y: e.clientY, b: e.button }; }
-  pointerMove(e: { clientX: number; clientY: number }) { this.pointer = { x: e.clientX, y: e.clientY }; }
-  pointerLeave() { this.pointer = null; this.hover = null; this.hoverCell = null; this.tip = null; }
-  pointerUp(e: { clientX: number; clientY: number; shiftKey: boolean }) {
+  pointerDown(e: Press & { button: number }) {
+    this.wake();
+    this.down = { x: e.clientX, y: e.clientY, b: e.button };
+    if (e.pointerType !== 'touch') return;
+    // a still finger held down is a right-click; a second finger is a pinch, not a tap
+    this.touches.add(e.pointerId ?? 0);
+    this.endPress();
+    if (this.touches.size > 1) { this.down = null; return; }
+    this.press = window.setTimeout(this.longPress, LONG_PRESS);
+  }
+  pointerMove(e: Press) {
+    this.wake();
+    this.pointer = { x: e.clientX, y: e.clientY };
+    // a touchscreen laptop: once the mouse moves, the ghost follows it again
+    if (e.pointerType !== 'touch' && this.ui.placing && this.ui.placing.at) this.dispatch({ type: 'PlacementAimed', cell: null });
+    const down = this.down;
+    if (this.press && down && Math.hypot(e.clientX - down.x, e.clientY - down.y) > 6) this.endPress();
+  }
+  pointerLeave() { this.wake(); this.pointer = null; this.hover = null; this.hoverCell = null; this.tip = null; }
+  pointerCancel(e: Press) { this.wake(); this.touches.delete(e.pointerId ?? 0); this.endPress(); this.down = null; }
+  pointerUp(e: Press & { shiftKey: boolean }) {
+    this.wake();
     const down = this.down; this.down = null;
+    if (e.pointerType === 'touch') { this.touches.delete(e.pointerId ?? 0); this.endPress(); }
     if (!down || (down.b !== 0 && down.b !== 2) || !this.scene) return;
     if (Math.hypot(e.clientX - down.x, e.clientY - down.y) > 6) return;
     this.scene.aim(e.clientX, e.clientY);
     if (down.b === 2) this.contextClick(e); else this.click(e);
   }
+  private endPress() { clearTimeout(this.press); this.press = 0; }
+  private longPress = () => {
+    this.press = 0;
+    const down = this.down;
+    if (!down || !this.scene || this.ui.placing) return;
+    this.down = null;               // so letting go is not also a tap
+    this.scene.aim(down.x, down.y);
+    this.contextClick({ clientX: down.x, clientY: down.y });
+  };
   private stagePoint(e: { clientX: number; clientY: number }) {
     const r = this.stageEl!.getBoundingClientRect();
     return { x: e.clientX - r.left, y: e.clientY - r.top };
   }
 
-  private click(e: { clientX: number; clientY: number; shiftKey: boolean }) {
+  private click(e: Press & { shiftKey: boolean }) {
     const scene = this.scene!, S = this.S, ui = this.ui;
     if (ui.placing) {
       const c = scene.pickCell(); if (!c) return;
-      const at = scene.placeAt(S, ui.placing, c);
-      if (at.reason) { this.note(at.reason, 'bad'); return; }
-      const err = this.act('place', ui.placing.type, at.x, at.z, ui.placing.r);
-      if (!err && !e.shiftKey) this.dispatch({ type: 'PlacementEnded' });
+      // a finger hides what it touches: the first tap shows where it would go, a second tap there places it
+      const aim = ui.placing.at;
+      if (e.pointerType === 'touch' && !(aim && aim.x === c.x && aim.z === c.z)) { this.dispatch({ type: 'PlacementAimed', cell: c }); return; }
+      this.placeOn(c, e.shiftKey);
       return;
     }
     const p = scene.pickObject();
@@ -236,6 +282,14 @@ export class Game {
     }
     this.select(null);
   }
+  private placeOn(c: Cell, keep: boolean) {
+    const placing = this.ui.placing!, at = this.scene!.placeAt(this.S, placing, c);
+    if (at.reason) { this.note(at.reason, 'bad'); return; }
+    if (this.act('place', placing.type, at.x, at.z, placing.r)) return;
+    this.dispatch(keep || placing.several ? { type: 'PlacementAimed', cell: null } : { type: 'PlacementEnded' });
+  }
+  // the on-screen ✓ while placing by touch
+  placeAimed() { const p = this.ui.placing; if (p && p.at && this.scene) this.placeOn(p.at, false); }
   private contextClick(e: { clientX: number; clientY: number }) {
     const scene = this.scene!;
     this.closeCtx();
@@ -248,6 +302,7 @@ export class Game {
   }
   private hoverTick() {
     const scene = this.scene!, S = this.S, ui = this.ui;
+    if (ui.placing && ui.placing.at && !ui.ctx) { this.aimTick(ui.placing, ui.placing.at); return; }
     if (!this.pointer || this.down || ui.ctx) { if (!this.pointer || ui.ctx) this.tip = null; scene.showGhost(S, null, null); return; }
     scene.aim(this.pointer.x, this.pointer.y);
     this.hoverCell = scene.pickCell();
@@ -283,12 +338,23 @@ export class Game {
     this.tip = { text, bad, x: Math.max(0, x), y: Math.max(0, y) };
   }
 
+  // placing by touch: the ghost and its tip stay on the cell last tapped, whatever the finger does next
+  private aimTick(placing: { type: string; r: number }, cell: Cell) {
+    const scene = this.scene!, S = this.S;
+    this.hover = null;
+    scene.showGhost(S, placing, cell);
+    const reason = scene.placeAt(S, placing, cell).reason, c = S.R.CAT[placing.type];
+    const p = scene.project(cell.x + 0.5, 0, cell.z + 0.5), r = this.stageEl!.getBoundingClientRect();
+    const text = reason || c.name + ' · ' + price(c) + ' · tap again or ✓ to place';
+    this.tip = { text, bad: !!reason, x: Math.max(0, Math.min(p.left, r.width - 290)), y: Math.max(0, Math.min(p.top, r.height - 60)) };
+  }
+
   // ---------- selection ----------
   select(target: Target | null) { this.dispatch({ type: 'Selected', target }); }
   focusItem(id: number) {
     const it = this.S.imap[id]; if (!it) return;
     const c = centreOf(it);
-    if (this.scene) this.scene.focusOn(c.x, c.z);
+    if (this.scene) { this.scene.focusOn(c.x, c.z); this.wake(); }
     this.dispatch({ type: 'OverlaysClosed' });
     this.select({ kind: 'item', id });
   }
@@ -459,7 +525,7 @@ export class Game {
     if (d.log.length) { this.setSpeed(5); this.note('Watching a replay. Act at any point to take over.', 'warn'); }
     else {
       this.setSpeed(1); this.select({ kind: 'worker', id: this.S.workers[0].id });
-      this.note(Object.keys(d.rules).length ? 'Scenario loaded with ' + Object.keys(d.rules).length + ' custom rules. Hover the subtitle to see them. Your move.' : 'New game on seed ' + d.seed + '. Your move.', 'warn');
+      this.note(Object.keys(d.rules).length ? 'Scenario loaded with ' + Object.keys(d.rules).length + ' custom rules. ' + (isTouch() ? 'They are listed under ⋯.' : 'Hover the subtitle to see them.') + ' Your move.' : 'New game on seed ' + d.seed + '. Your move.', 'warn');
     }
     return null;
   }

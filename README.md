@@ -3,7 +3,7 @@
 A small isometric management game about flow, queues and capacity. It comes with a headless runner and a solver
 that use the game's own simulation. A run found by the solver can be pasted into the browser game and watched.
 
-The design is in [docs/design.md](docs/design.md).
+The design is in [docs/design.md](docs/design.md). How it plays on phones is in [docs/mobile.md](docs/mobile.md).
 
 ## Play
 
@@ -95,7 +95,7 @@ build.js        runs Vite to write dist/index.html, one self-contained page. --f
 headless/       command-line runner and solver. Loads src/sim.js, src/levels.js and src/bot.js unchanged.
 test/           determinism, rules and level tests.
 out/            solver, sweep and explore results (JSON/CSV, not committed).
-docs/           the game design.
+docs/           the game design and the mobile audit.
 ```
 
 The browser and Node load the same three files. None of them knows which one it is running in.

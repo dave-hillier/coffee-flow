@@ -45,6 +45,33 @@ describe('placing', () => {
     expect(ui.placing!.r).toBe(0);
   });
 
+  it('a touch aims at a cell first; rotating keeps the aim, a new aim moves it', () => {
+    let ui = after({ type: 'PlacementStarted', item: 'till', r: 0 }, { type: 'PlacementAimed', cell: { x: 2, z: 3 } }, { type: 'PlacementRotated' });
+    expect(ui.placing).toEqual({ type: 'till', r: 1, at: { x: 2, z: 3 } });
+    ui = reduce(ui, { type: 'PlacementAimed', cell: { x: 4, z: 1 } });
+    expect(ui.placing!.at).toEqual({ x: 4, z: 1 });
+  });
+
+  it('aiming or keeping on with nothing in hand does nothing', () => {
+    const ui = after({ type: 'PlacementAimed', cell: { x: 1, z: 1 } }, { type: 'SeveralToggled' });
+    expect(ui.placing).toBeNull();
+  });
+
+  it('keep placing is a toggle, forgotten with the aim when placing ends', () => {
+    let ui = after({ type: 'PlacementStarted', item: 'grinder', r: 0 }, { type: 'SeveralToggled' }, { type: 'PlacementAimed', cell: { x: 1, z: 1 } });
+    expect(ui.placing!.several).toBe(true);
+    expect(after({ type: 'PlacementStarted', item: 'grinder', r: 0 }, { type: 'SeveralToggled' }, { type: 'SeveralToggled' }).placing!.several).toBe(false);
+    ui = reduce(reduce(ui, { type: 'PlacementEnded' }), { type: 'PlacementStarted', item: 'grinder', r: 0 });
+    expect(ui.placing).toEqual({ type: 'grinder', r: 0 });
+    expect(ui.tray).toBe('machines');
+  });
+
+  it('done leaves build mode altogether', () => {
+    const ui = after({ type: 'PlacementStarted', item: 'till', r: 0 }, { type: 'TrayPicked', tray: null });
+    expect(ui.placing).toBeNull();
+    expect(inBuildMode(ui)).toBe(false);
+  });
+
   it('opening an overlay puts down what was being placed', () => {
     const ui = after({ type: 'PlacementStarted', item: 'till', r: 0 }, { type: 'OverlayToggled', overlay: 'research', open: true });
     expect(ui.placing).toBeNull();
@@ -58,6 +85,14 @@ describe('speed', () => {
     const ui = after({ type: 'SpeedChanged', speed: 5 }, { type: 'SpeedChanged', speed: 0 });
     expect(ui.speed).toBe(0);
     expect(ui.lastRunSpeed).toBe(5);
+  });
+
+  it('the speed button steps up through the running speeds, wraps, and unpauses', () => {
+    expect(after({ type: 'SpeedCycled' }).speed).toBe(2);
+    expect(after({ type: 'SpeedChanged', speed: 20 }, { type: 'SpeedCycled' }).speed).toBe(1);
+    const ui = after({ type: 'SpeedChanged', speed: 5 }, { type: 'SpeedChanged', speed: 0 }, { type: 'SpeedCycled' });
+    expect(ui.speed).toBe(20);
+    expect(ui.lastRunSpeed).toBe(20);
   });
 
   it('the title screen pauses and remembers the speed to come back to', () => {

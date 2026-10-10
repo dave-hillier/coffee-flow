@@ -1,4 +1,5 @@
 import { useEffect, useRef, type KeyboardEvent } from 'react';
+import { isTouch } from '../touch';
 import { useGame, useUi } from '../useGame';
 
 // the ⋯ menu: tools and settings most players rarely need
@@ -29,12 +30,14 @@ export function MoreMenu() {
   };
   // any choice closes the menu
   const pick = (fn: () => void) => () => { setOpen(false); fn(); };
-  const S = game.S;
+  const S = game.S, rules = Object.entries(S.over).map(([k, v]) => k + ' = ' + v);
   return (
     <div className="more" ref={boxRef}>
       <button type="button" ref={btnRef} aria-haspopup="menu" aria-expanded={open} aria-controls="moreMenu" aria-label="More tools" title="More tools" onClick={() => setOpen(!open)}>⋯</button>
       <div className="more-menu" id="moreMenu" role="menu" hidden={!open} ref={menuRef} onKeyDown={keys}>
-        <p className="more-h" title={Object.entries(S.over).map(([k, v]) => k + ' = ' + v).join('\n')}>{game.scenario}</p>
+        <p className="more-h" title={rules.join('\n')}>{game.scenario}</p>
+        {/* no hover on a finger: the custom rules are listed instead */}
+        {isTouch() && rules.length > 0 && <ul className="more-rules">{rules.map((r) => <li key={r}>{r}</li>)}</ul>}
         <button type="button" role="menuitemcheckbox" aria-checked={ui.overlay === 'flow'} onClick={pick(() => game.toggleOverlay('flow'))}>Flow charts<kbd>F</kbd></button>
         <button type="button" role="menuitem" onClick={pick(() => dispatch({ type: 'ModalOpened', modal: 'replay' }))}>Replay code</button>
         <button type="button" role="menuitem" onClick={pick(() => dispatch({ type: 'ModalOpened', modal: 'playtest' }))}>Playtest bots</button>

@@ -108,7 +108,13 @@ export class ShopScene {
     controls.enableDamping = true; controls.dampingFactor = 0.12;
     controls.maxPolarAngle = 1.3; controls.minZoom = 0.6; controls.maxZoom = 4;
     controls.screenSpacePanning = true;
+    // a finger drags the floor; two fingers turn and zoom, so a tap can't tip the view
+    controls.touches = { ONE: THREE.TOUCH.PAN, TWO: THREE.TOUCH.DOLLY_ROTATE };
+    controls.addEventListener('start', () => this.onMove());
+    controls.addEventListener('change', () => this.onMove());
   }
+  // told whenever the camera moves, including while it eases to a stop after a drag
+  onMove = () => {};
 
   dispose() {
     this.controls.dispose();

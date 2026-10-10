@@ -3,22 +3,24 @@ import { Sim } from '../engine';
 import { beansInShop, holdsSacks, researchRates, sacksStored } from '../derive';
 import { money, price, secsText } from '../format';
 import type { Game } from '../game';
+import { isTouch } from '../touch';
 import { BUILD_TRAYS } from '../ui';
 import { useGame, useUi } from '../useGame';
 
 const SHORT: Record<string, string> = { till: 'Till', pickup: 'Pickup', brewer: 'Brewer', grinder: 'Grinder', espresso: 'Espresso', pastry: 'Cake case', stock: 'Stock area', store: 'Cupboard', milk: 'Milk', syrup: 'Syrups' };
 const TITLES: Record<string, string> = { menu: 'Menu', beans: 'Beans', staff: 'Staff' };
 const NOTES: Record<string, string> = { menu: 'Click a drink to take it off or put it back', staff: 'Pick someone to see what they do', beans: 'Workers carry sacks in from the back door to the hoppers' };
+const TOUCH_NOTES: Record<string, string> = { menu: 'Tap a drink to take it off or put it back' };
 
 // Picking a tool opens its tray above the icon row. A build tray shows what can be bought; picking an item turns the
 // cursor into a ghost; after placing, the tray comes back.
 export function Tray() {
   const { ui } = useUi();
   const game = useGame();
-  const tray = ui.tray!, build = BUILD_TRAYS[tray];
+  const tray = ui.tray!, build = BUILD_TRAYS[tray], touch = isTouch();
   return (
     <section className="tray" id="tray" aria-labelledby="trayTitle">
-      <header><h2 id="trayTitle">{build ? build[0] : TITLES[tray]}</h2><span>{build ? money(game.S.cash) + ' to spend · Esc to close' : NOTES[tray]}</span></header>
+      <header><h2 id="trayTitle">{build ? build[0] : TITLES[tray]}</h2><span>{build ? money(game.S.cash) + ' to spend · ' + (touch ? 'tap ' + build[0] + ' again to close' : 'Esc to close') : (touch && TOUCH_NOTES[tray]) || NOTES[tray]}</span></header>
       {build && <BuildTiles game={game} types={build[1]} />}
       {tray === 'menu' && <MenuChips game={game} />}
       {tray === 'beans' && <Supplies game={game} />}
@@ -82,7 +84,7 @@ function TileDetail({ game, t }: { game: Game; t: string }) {
       <dl>
         <dt>Price</dt><dd>{price(c)}</dd><dt>Build time</dt><dd>{c.mins ? c.mins + ' min' : 'ready at once'}</dd><dt>Size</dt><dd>{c.w}×{c.d}</dd><dt>You have</dt><dd>{have}</dd>
       </dl>
-      {locked ? <p className="why">Comes with {Sim.TOPICS[locked].name} research.</p> : short > 0 ? <p className="why">Need {money(short)} more.</p> : <p className="key">Click to place · R rotates · Shift-click for several</p>}
+      {locked ? <p className="why">Comes with {Sim.TOPICS[locked].name} research.</p> : short > 0 ? <p className="why">Need {money(short)} more.</p> : <p className="key">{isTouch() ? 'Tap it, then tap the floor where it goes' : 'Click to place · R rotates · Shift-click for several'}</p>}
     </>
   );
 }

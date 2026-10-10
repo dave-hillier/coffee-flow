@@ -1,4 +1,4 @@
-import { useRef, useState, type PointerEvent } from 'react';
+import { useEffect, useRef, useState, type PointerEvent } from 'react';
 import { Bot, Sim, type TrialResult } from '../engine';
 import { money } from '../format';
 import { useGame, useUi } from '../useGame';
@@ -165,12 +165,21 @@ function CashChart({ rows, hours }: { rows: Row[]; hours: number }) {
   const ends = rows.map((r) => ({ r, y: ys(r.series[n - 1]) })).sort((a, b) => a.y - b.y);
   for (let k = 1; k < ends.length; k++) if (ends[k].y - ends[k - 1].y < 13) ends[k].y = ends[k - 1].y + 13;
   const move = (e: PointerEvent<SVGRectElement>) => {
+    area.current = e.currentTarget;
     const svg = e.currentTarget.ownerSVGElement!, r = svg.getBoundingClientRect(), x = (e.clientX - r.left) * W / r.width;
     const j = Math.max(0, Math.min(n - 1, Math.round((x - m.l) / ((W - m.l - m.r) / n)) - 1));
     // the tip sits in the chart box, kept inside its right edge
     const bx = svg.parentElement!.getBoundingClientRect();
     setHover({ j, left: Math.min(e.clientX - bx.left + 12, bx.width - 136), top: e.clientY - bx.top + 12 });
   };
+  // a finger has no leave: the next touch outside the chart clears the tip
+  const area = useRef<Element | null>(null), touch = !!hover;
+  useEffect(() => {
+    if (!touch) return;
+    const away = (e: Event) => { if (e.target !== area.current) setHover(null); };
+    document.addEventListener('pointerdown', away, true);
+    return () => document.removeEventListener('pointerdown', away, true);
+  }, [touch]);
   const mins = hover ? (hover.j + 1) * 10 : 0;
   return (
     <>
@@ -191,7 +200,7 @@ function CashChart({ rows, hours }: { rows: Row[]; hours: number }) {
           </g>
         ))}
         {hover && <line x1={xs(hover.j)} x2={xs(hover.j)} y1={m.t} y2={H - m.b} stroke="#aab6c4" strokeWidth="1" />}
-        <rect x={m.l} y={m.t} width={W - m.l - m.r} height={H - m.t - m.b} fill="transparent" onPointerMove={move} onPointerLeave={() => setHover(null)} />
+        <rect x={m.l} y={m.t} width={W - m.l - m.r} height={H - m.t - m.b} fill="transparent" onPointerDown={move} onPointerMove={move} onPointerLeave={(e) => { if (e.pointerType !== 'touch') setHover(null); }} />
       </svg>
       {hover && (
         <div className="ctip" style={{ left: hover.left, top: hover.top }}>

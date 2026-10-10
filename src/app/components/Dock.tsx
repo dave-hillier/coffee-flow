@@ -1,3 +1,4 @@
+import { useEffect, useRef } from 'react';
 import { Sim } from '../engine';
 import { researchable, researchRates, sumCups } from '../derive';
 import { tutorialStep } from '../tickets';
@@ -18,10 +19,24 @@ export function Dock() {
   const game = useGame();
   const { handlers, tip } = useWhyTip();
   const S = game.S;
+  const navRef = useRef<HTMLElement>(null);
+  // when the tools don't fit (a phone), the edge they run off fades so the row reads as one that scrolls
+  useEffect(() => {
+    const nav = navRef.current!;
+    const edges = () => {
+      nav.toggleAttribute('data-more-left', nav.scrollLeft > 1);
+      nav.toggleAttribute('data-more-right', nav.scrollLeft + nav.clientWidth < nav.scrollWidth - 1);
+    };
+    const ro = new ResizeObserver(edges);
+    ro.observe(nav);
+    for (const c of nav.children) ro.observe(c);
+    nav.addEventListener('scroll', edges, { passive: true });
+    return () => { ro.disconnect(); nav.removeEventListener('scroll', edges); };
+  }, []);
   return (
     <footer className="dock">
       {tip}
-      <nav className="tools" aria-label="Shop tools" {...handlers}>
+      <nav className="tools" aria-label="Shop tools" ref={navRef} {...handlers}>
         <div className="tool-group" role="group" aria-label="Build">
           <Tool tray="counters" ico="till" title="Counters (B)" label="Counters" />
           <Tool tray="machines" ico="espresso" title="Machines" label="Machines" />

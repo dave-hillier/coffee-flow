@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { Sim } from '../engine';
+import { isTouch } from '../touch';
 import { useGame, useUi } from '../useGame';
 
 // Every decision is recorded against game time, so a code rebuilds a run exactly
@@ -25,7 +26,7 @@ export function ReplayModal() {
   }, [restartArmed]);
   const close = () => dispatch({ type: 'ModalClosed' });
   const copy = () => {
-    const fallback = () => { outRef.current?.focus(); outRef.current?.select(); setCopyMsg('Selected. Press Ctrl+C or Cmd+C to copy.'); };
+    const fallback = () => { outRef.current?.focus(); outRef.current?.select(); setCopyMsg(isTouch() ? 'Selected. Use Copy in the menu that comes up.' : 'Selected. Press Ctrl+C or Cmd+C to copy.'); };
     try { navigator.clipboard.writeText(code).then(() => setCopyMsg('Copied.'), fallback); } catch (e) { fallback(); }
   };
   const load = () => { const e = game.loadCode(paste || code); setErr(e || ''); };
@@ -43,7 +44,7 @@ export function ReplayModal() {
         <p className="err">{err}</p>
         <div className="row">
           <button type="button" onClick={load}>Load code</button>
-          <button type="button" className="danger" onClick={restart}>{restartArmed ? 'Click again to restart' : 'Start a new game'}</button>
+          <button type="button" className="danger" onClick={restart}>{restartArmed ? (isTouch() ? 'Tap' : 'Click') + ' again to restart' : 'Start a new game'}</button>
           <button type="button" onClick={close}>Close</button>
         </div>
       </div>

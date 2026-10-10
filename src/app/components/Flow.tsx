@@ -1,4 +1,4 @@
-import { useState, type PointerEvent, type ReactNode } from 'react';
+import { useEffect, useRef, useState, type PointerEvent, type ReactNode } from 'react';
 import type { GameState } from '../engine';
 import { fmtClock } from '../format';
 import type { FlowMode } from '../ui';
@@ -68,17 +68,32 @@ export function Flow() {
   );
 }
 
-// hover over a chart: a crosshair at the nearest minute, and a tip saying what was there
+// hover over a chart: a crosshair at the nearest minute, and a tip saying what was there. A finger taps or drags
+// sideways along the chart instead, and the tip stays until the next touch elsewhere.
 function useChartHover(n: number) {
-  const [hover, setHover] = useState<{ i: number; px: number; py: number; left: number; top: number } | null>(null);
+  const [hover, setHover] = useState<{ i: number; px: number; py: number; left: number; top: number; touch: boolean } | null>(null);
+  const area = useRef<Element | null>(null);
   const move = (e: PointerEvent<SVGRectElement>, height: number) => {
+    area.current = e.currentTarget;
     const svg = e.currentTarget.ownerSVGElement!, r = svg.getBoundingClientRect();
     const px = (e.clientX - r.left) * GW_ / r.width, py = (e.clientY - r.top) * height / r.height;
     const i = Math.max(0, Math.min(n - 1, Math.round((px - ML) / ((GW_ - ML - MR) / Math.max(1, n - 1)))));
     const bx = svg.parentElement!.getBoundingClientRect();
-    setHover({ i, px, py, left: Math.max(0, Math.min(e.clientX - bx.left + 12, bx.width - 160)), top: e.clientY - bx.top });
+    setHover({ i, px, py, left: Math.max(0, Math.min(e.clientX - bx.left + 12, bx.width - 160)), top: e.clientY - bx.top, touch: e.pointerType === 'touch' });
   };
-  return { hover, move, leave: () => setHover(null) };
+  const touch = !!hover && hover.touch;
+  useEffect(() => {
+    if (!touch) return;
+    const away = (e: Event) => { if (e.target !== area.current) setHover(null); };
+    document.addEventListener('pointerdown', away, true);
+    return () => document.removeEventListener('pointerdown', away, true);
+  }, [touch]);
+  const leave = (e: PointerEvent) => { if (e.pointerType !== 'touch') setHover(null); };
+  const hit = (height: number) => {
+    const at = (e: PointerEvent<SVGRectElement>) => move(e, height);
+    return { onPointerDown: at, onPointerMove: at, onPointerLeave: leave };
+  };
+  return { hover, hit };
 }
 function ChartTip({ at, children }: { at: { left: number; top: number }; children: ReactNode }) {
   // above the pointer, inside the chart
@@ -95,7 +110,7 @@ interface LaneProps {
 }
 function Lane(o: LaneProps) {
   const { d } = o, n = d.t.length, Hh = o.height || 120, top = 6, bot = o.axis ? 18 : 6;
-  const { hover, move, leave } = useChartHover(n);
+  const { hover, hit } = useChartHover(n);
   if (n < 2) return <><h3>{o.title || o.label}</h3><p className="flow-empty">Fills in as the shop trades, one point per game minute.</p></>;
   const x = (i: number) => xOf(i, n);
   let sums: number[] = [], ymax: number, base0 = 0;
@@ -151,7 +166,7 @@ function Lane(o: LaneProps) {
         <text x="4" y={top + 10} fill="#e9e4d8" fontSize="11" fontWeight="600">{o.label}</text>
         {o.sub && <text x="4" y={top + 23} fill="#aab6c4" fontSize="10">{o.sub}</text>}
         {hover && <line x1={xOf(hover.i, n)} x2={xOf(hover.i, n)} y1={top} y2={Hh - bot} stroke="#aab6c4" />}
-        <rect x={ML} y={top} width={GW_ - ML - MR} height={Hh - top - bot} fill="transparent" onPointerMove={(e) => move(e, Hh)} onPointerLeave={leave} />
+        <rect x={ML} y={top} width={GW_ - ML - MR} height={Hh - top - bot} fill="transparent" {...hit(Hh)} />
       </svg>
       {hover && <ChartTip at={hover}>{tip(hover.i)}</ChartTip>}
     </>
@@ -167,7 +182,7 @@ const ACT_TEXT = (code: string) => {
 const MK: Record<string, string> = { built: '#199e70', research: '#e9e4d8', delivery: '#c98500', hire: '#3987e5' };
 function Gantt({ S, d }: { S: GameState; d: Series }) {
   const n = d.t.length;
-  const { hover, move, leave } = useChartHover(n);
+  const { hover, hit } = useChartHover(n);
   if (n < 2) return <><h3>Who did what</h3><p className="flow-empty">Fills in as the shop trades.</p></>;
   const t0 = d.t[0] - 60, t1 = d.t[n - 1], cols = GW_ - ML - MR, span = Math.max(1, t1 - t0);
   const rows = Object.entries(S.acts).filter(([, a]) => a.segs.length && a.segs[a.segs.length - 1][2] >= t0);
@@ -241,7 +256,7 @@ function Gantt({ S, d }: { S: GameState; d: Series }) {
         })}
         {[0, 1, 2, 3, 4, 5].map((k) => <text key={k} x={ML + cols * k / 5} y={Hh - 3} textAnchor={k === 0 ? 'start' : k === 5 ? 'end' : 'middle'} fill="#aab6c4" fontSize="10">{fmtClock(t0 + span * k / 5)}</text>)}
         {hover && <line x1={xOf(hover.i, n)} x2={xOf(hover.i, n)} y1={top} y2={Hh - axis} stroke="#aab6c4" />}
-        <rect x={ML} y={top} width={cols} height={Hh - axis - top} fill="transparent" onPointerMove={(e) => move(e, Hh)} onPointerLeave={leave} />
+        <rect x={ML} y={top} width={cols} height={Hh - axis - top} fill="transparent" {...hit(Hh)} />
       </svg>
       {hover && tipBody && <ChartTip at={hover}>{tipBody}</ChartTip>}
     </>
