@@ -118,8 +118,9 @@
     // switchPct (optional, 0 by default) adds a context-switching loss per extra topic. work 0 = known from the start.
     // Each topic: work to finish it, then `to` (the new value) or `pct` (change in percent, rounded to whole units).
     research: { enabled: 1, rate: 10, switchPct: 0, topics: {
-      rail1: { work: 150, to: 8 }, rail2: { work: 300, to: 12 }, rail3: { work: 500, to: 16 }, cards: { work: 250, to: 50 },
-      counter1: { work: 150, to: 8 }, counter2: { work: 300, to: 12 }, counter3: { work: 500, to: 16 }, names: { work: 200, to: 8 },
+      // bigger buffers are end-game polish, priced so: they hold more work, they do not make it faster
+      rail1: { work: 600, to: 8 }, rail2: { work: 900, to: 12 }, rail3: { work: 1200, to: 16 }, cards: { work: 250, to: 50 },
+      counter1: { work: 600, to: 8 }, counter2: { work: 900, to: 12 }, counter3: { work: 1200, to: 16 }, names: { work: 200, to: 8 },
       espresso: { work: 600 }, burrs: { work: 300, pct: -50 }, barista1: { work: 400, pct: -15 }, barista2: { work: 700, pct: -15 },
       hoppers: { work: 200, pct: 100 }, knock: { work: 250, pct: 100 },
       foam: { work: 400 }, micro: { work: 300 }, art1: { work: 300, pct: 8 }, art2: { work: 450, pct: 8 }, art3: { work: 650, pct: 10 },

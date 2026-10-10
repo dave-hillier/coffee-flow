@@ -45,7 +45,7 @@ exactly as the game does.
 
 | Level | Room | What it is about |
 |---|---|---|
-| 1 The Kiosk | 6×4 | Tutorial. One worker, filter only, nothing to research. Keep up 10 served an hour for half an hour. |
+| 1 The Kiosk | 6×4 | Tutorial. One worker and little cash. Keep up 10 served an hour for half an hour. |
 | 2 Morning Rush | 6×6 | More trade than one person can serve; one hire allowed, and the barista course to research. Keep up 20 an hour for half an hour. |
 | 3 The Corner Café | 8×6 | Research espresso and install it while trading, then keep up 22 an hour for half an hour. |
 | 4 High Street | 10×8 | A full bar with milk and syrups. Keep up 25 served an hour for a whole hour. |
@@ -54,7 +54,8 @@ exactly as the game does.
 - **Rooms.** `room.x0`, `room.x1` and `room.z0` mark out the floor inside the 12×10 plot. The room must take in the
   front door and the squares staff start on; the back door sits in its back corner. Even edges keep the walls whole.
 - **What a shop has.** `allow.items` and `allow.lanes` list, space-separated, the equipment that can be bought and the
-  research lanes that can be studied. Trays, tiles and research lanes outside them are hidden.
+  research lanes that can be studied. Trays, tiles and research lanes outside them are hidden. The levels leave both
+  at their defaults: research is the gate.
 - **Goals.** `served`, `cash`, `menu` (a product on the menu), `rate` (n served in the last hour, held for `mins`,
   optionally with door-to-cup under `lead` seconds), `trade` (n customers an hour coming in) and `handsOff` (`mins` with
   no actions at all, walk-outs at most `walkPct`% and cash ending higher; any action starts the clock again).
@@ -197,10 +198,12 @@ replays play out.
   `needs` lists the topics that must finish first, and can reach into another lane (the drinks lane grows out of
   Espresso training). `needs` is kept for real dependencies, mostly tiers of the same thing, so the barista course,
   card readers and names on cups each stand alone.
-- **What a shop is offered.** A topic shows only if its lane is in `allow.lanes`, it unlocks equipment in
-  `allow.items` (when it unlocks any), and every topic it needs shows too. A filter-only kiosk with the bar lane
-  open gets the barista course and bigger hoppers, not espresso training. The front counter lane (bigger order
-  rails and pickup counters) is end-game polish: only the Flagship and free play open it.
+- **Research is the gate.** Every level can buy and research everything; levels differ in room, cash, staff and
+  trade. What comes early or late is set by each topic's work and `needs`: the barista course is cheap and stands
+  alone, while bigger order rails and pickup counters (600, 900 and 1200 units a tier) are end-game polish.
+- **What a shop is offered.** Under custom rules, a topic shows only if its lane is in `allow.lanes`, it unlocks
+  equipment in `allow.items` (when it unlocks any), and every topic it needs shows too, so a filter-only shop is
+  not offered espresso training.
 - **Unlocks.** Espresso training unlocks the grinder and espresso machine. Cake supplier unlocks the cake display.
   In the drinks lane, Steamed milk unlocks the milk station and lattes, Microfoam adds cappuccinos, Syrup station
   unlocks the syrup station and vanilla lattes, then Caramel syrup, Seasonal syrups (gingerbread) and Whipped cream
