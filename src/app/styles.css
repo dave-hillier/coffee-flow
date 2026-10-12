@@ -572,9 +572,9 @@ section.research header { flex-wrap: wrap; }
   .panel { left: 12px; right: 12px; top: auto; bottom: 12px; width: auto; max-height: 55%; }
   .rail { width: calc(100% - 24px); }
   .hint { display: none; }
-  /* stacked: the tree keeps its height, and tree and topic scroll together */
-  .res-body { display: block; overflow-y: auto; }
-  .topic { padding-left: 0; padding-top: 10px; border-left: 0; border-top: 1px solid var(--line); }
+  /* stacked: the tree scrolls above, and the chosen topic stays in view below it, so a tap on a topic visibly picks it */
+  .res-body { grid-template-columns: minmax(0, 1fr); grid-template-rows: minmax(0, 1fr) auto; }
+  .topic { max-height: 45dvh; overflow-y: auto; overscroll-behavior: contain; padding-left: 0; padding-top: 10px; border-left: 0; border-top: 1px solid var(--line); }
 }
 /* a finger: every control at least 44px each way, no shortcut keys, and text fields big enough that iOS does not zoom */
 .more-rules { margin: 0 0 4px; padding: 0 8px 0 22px; font-size: 11px; color: var(--muted); }
